@@ -1,4 +1,4 @@
-data <- read.csv("data/original/homicidios.csv", na.strings = c("Sin dato", "NaN", "nan"), stringsAsFactors = FALSE)
+data <- read.csv("data/original/homicidios.csv", na.strings = c("Sin dato", "NaN", "nan", "None"), stringsAsFactors = FALSE)
 
 dim(data) #=> 19647, 36
 
@@ -40,4 +40,22 @@ n <- nrow(data[(is.na(data$LATITUD) & is.na(data$LONGITUD)), ])
 data <- data[!(is.na(data$LATITUD) & is.na(data$LONGITUD)), ]
 cat("Se eliminaron ", n, " registros donde LATITUD y LONGITUD son faltantes.\n")
 
+# 4 -----------------------------------------------------------------------
+# Cambiar NAs en LUGAR por "Desconocido"
+library(dplyr)
+data <- data %>%
+  mutate(LUGAR = ifelse(is.na(LUGAR), "Desconocido", LUGAR))
+cat("Cambiamos los registros donde LUGAR es NA por 'Desconocido'")
+
+# 5 -----------------------------------------------------------------------
+# Eliminar duplicados
+n <- nrow(data)
+data <- unique(data)
+cat("Eliminamos ", n - nrow(data), " registros duplicados.")
+
+data <- na.omit(data)
+
 str(data)
+
+# EXPORTAR TABLA DE HOMICIDIOS LIMPIA
+write.csv(data, file = "data/homicidios.csv", row.names = FALSE)
