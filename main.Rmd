@@ -6,17 +6,92 @@ output: html_notebook
 
 # Primer análisis
 ```{r}
-# LIBRERIAS
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(forcats)
+library(sf)
+library(ggmap)
+library(ggspatial)
+library(RColorBrewer)
 ```
 
 ```{r}
-# MAPA MEDELLÍN
+medellin_mapa <- st_read("data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
 ```
 
 
 ## Homicidios
 ```{r}
-# TODO JP
+homicidios <- read.csv("data/homicidios.csv")
+
+# Para analisis temporal
+homicidios$FECHA_HECHO <- ymd_hms(homicidios$FECHA_HECHO)
+homicidios$AÑO <- year(homicidios$FECHA_HECHO)
+homicidios$MES <- month(homicidios$FECHA_HECHO, label = TRUE, abbr = TRUE)
+
+summary(homicidios)
+```
+
+### Generalidades
+#### Modalidad de Homicidio
+```{r}
+ggplot(homicidios, aes(y = fct_infreq(MODALIDAD))) +
+  geom_bar(fill = "purple") +
+  theme_minimal() +
+  labs(title = "Frecuencia de homicidios por modalidad", x = "Cantidad", y = "Modalidad")
+```
+
+#### Homicidios por género
+```{r}
+ggplot(homicidios, aes(x = SEXO)) +
+  geom_bar(fill = "orange") +
+  theme_minimal() +
+  labs(title = "Distribución de homicidios por género", x = "Género", y = "Cantidad")
+```
+
+#### Distribución edad de las víctimas
+```{r}
+ggplot(homicidios, aes(x = EDAD)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribución de la edad de las víctimas", x = "Edad", y = "Frecuencia")
+```
+
+
+### Análisis Temporal
+#### Homicidios por año
+```{r}
+ggplot(homicidios, aes(x = as.factor(AÑO))) +
+  geom_bar(fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Número de homicidios por año", x = "Año", y = "Cantidad de homicidios")
+```
+
+#### Homicidios por mes del año
+```{r}
+ggplot(homicidios, aes(x = MES)) +
+  geom_bar(fill = "darkred") +
+  theme_minimal() +
+  labs(title = "Número de homicidios por mes", x = "Mes", y = "Cantidad de homicidios")
+```
+
+### Análisis espacial
+```{r}
+homicidios_sf <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+```
+
+#### Distribución de Homicidios por modalidad
+```{r}
+ggplot() +
+  geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
+  geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6) +  # Homicidios
+  scale_color_brewer(palette = "Paired") +  # Paleta de colores con 11 categorías
+  theme_minimal() +
+  labs(title = "Mapa de homicidios por modalidad", color = "Modalidad") +
+  annotation_scale(location = "br") + 
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
 ```
 
 ## Hospitales
