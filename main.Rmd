@@ -3,6 +3,52 @@ title: "Riesgo de Homicidio en Medellín"
 output: html_notebook
 ---
 # Andrés Felipe García Orrego - Juan Pablo Robledo Meza
+# Introducción
+La violecia en Medellín es un problema de larga data, el cual ha tenido momentos criticos que han generado grandes procesos sociales en la ciudad sin embargo esto no se ve reflejado en modelos basados en datos para la construccion de politicas publicas orientadas a un manejo mas tecnico de los delitos violentos en la ciudad, en particular los homicidios son crimenes razonablemente bien documentados y de alto impacto para la opinión publica y la ciudad, por lo cual decidimos construir un **Modelo espacio-temporal bayesiano** que estime el riesgo de homicidio usando INLA.
+Con el fin de responer las siguientes preguntas:
+
+# Preguntas
+  - **Riesgo de homicidio en un lugar de Medellín**.
+  - **Puntos calientes.**
+  - **¿Cuando hay mas riesgo?**
+  - **Presencia policial vs riesgo.**
+  - **Metricas para estos tipos de modelos.**
+  
+# Limpieza y Preparación de los Datos de Homicidios en Medellín:
+
+Para garantizar la calidad y pertinencia de los datos en nuestro análisis del riesgo de homicidios en Medellín, realizamos un proceso de limpieza de la base de datos descargada de MeData, que contenía 19,647 registros y 36 columnas.
+
+## Eliminación de Columnas Irrelevantes
+
+Identificamos columnas con valores únicos o sin información relevante para el análisis:
+
+**Columnas con valores constantes**: (CANTIDAD, CONDUCTA, FECHA_INGESTION)
+
+**Columnas con alta cantidad de valores NA**: (GRUPO_ACTOR, ACTIVIDAD_DELICTIVA, DISCAPACIDAD, TESTIGO, entre otras)
+
+
+Todas estas columnas fueron eliminadas, ya que no aportaban información adicional.
+
+## Selección de Variables Clave.
+
+Tras la limpieza, seleccionamos las variables más relevantes para el análisis:
+- LATITUD, LONGITUD → Ubicación geográfica del homicidio.
+
+
+- SEXO, EDAD → Características de la víctima.
+
+
+- MODALIDAD → Forma en que ocurrió el hecho.
+
+- NOMBRE_BARRIO, CODIGO_BARRIO, CODIGO_COMUNA  Ubicación administrativa.
+
+- LUGAR → Tipo de espacio donde ocurrió el homicidio.
+
+Con estos datos estructurados, podemos proceder al análisis espacio-temporal del riesgo de homicidios en la ciudad.
+
+## Resultado
+
+Teniendo finalmente **18516 registros y 10 columnas**
 
 # Primer análisis
 ```{r}
@@ -94,38 +140,61 @@ ggplot() +
   annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
 ```
 
-## Hospitales
-```{r}
-# TODO ANDRES
-```
-
 ## Cuadrantes de Policía
 ```{r}
 # FALTA QUE DANIEL NOS PASE LOS DATOS
 ```
 
-## Colegios
-```{r}
-# TODO JP
-```
 
 
-# Preguntas
-TODO
+
+
 
 # Modelo Estadístico
-EXPLICAR MODELO POISSON PAPER
+  Nos basaremos en el documento https://www.dspace.espol.edu.ec/bitstream/123456789/56598/1/T-110414%20CLAUDIA%20RODR%C3%8DGUEZ%20MENDEZ%20Y%20SAMANTHA%20ORTIZ%20SANTAMARIA%20INGENIERA%20ESTADISTICA.pdf?.com. En el cual se propone un modelo similar para la cuidadd de Guayaquil en ecuador, debido a que encontramos caracteristicas importantes en comun, entre ellas el numero de habitantes y el tamaño del area metropolitana. Ademas de condiciones cultares, sociales y delictivas similares
+ El modelo seguirá un enfoque **jerárquico bayesiano**, con una **distribución Poisson** para los homicidios y un predictor que incluye efectos espaciales, temporales y covariables por ultimo la estimación se hara siguiendo el metodo INLA (El cual resulta más rápido para modelos espacio temporales). 
+ 
+$$Y_{i,t}= Poisson(\lambda_{i,t})$$.
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+Donde: 
+- $Y_{i,t}$ es el número de homicidios en la comuna i en el tiempo t 
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
+- $\lambda_{i,t}$ es la **Tasa esperada de homicidios** en la comuna i en el tiempo t
+
+
+Nuestro modelo lineal predictor se define como:
+
+
+ $log(\lambda_{i,t})=\beta_0+\beta_{policia}x_{policia,i,t}+f(espacio)+f(tiempo)+f(espacio-tiempo)$
+ 
+ Donde:
+ 
+$\beta_0$: Intercepto general
+
+
+$x_{policia,i,t}$: Cantidad de estaciones de policia en la comuna i en el tiempo t
+
+
+$\beta_{policia}$: Efecto de la presencia policial sobre los homicidios
+ 
+ 
+$f(espacio)$: Efecto espacial que modela **dependencias geográficas**
+
+
+$f(tiempo$: Efecto temporal que captura **tendencias en el  tiempo** (Puede ser una serie de tiempo)
+
+
+$f(espacio-tiempo)$: Interacción espacio temporal para modelar **cómo varían los homicidios de cada comuna a lo largo del tiempo**
+
+
+# Siguientes pasos:
+- Obtener datos poblacionales de las comunas.
+- Obtener información acerca de los cuadrante.
+- Análisis bivariado de los datos.
+- Implementar INLA
+- Analizar resultados y storing telling
 ```{r}
  
 ```
 
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
