@@ -114,6 +114,7 @@ homicidios_con_comuna <- homicidios_con_comuna %>%
 
 data <- homicidios_con_comuna[, c("FECHA_HECHO", "LONGITUD", "LATITUD", "SEXO", "EDAD", "MODALIDAD", "LUGAR", "NOMBRE_BARRIO", "nombre")]
 colnames(data)[colnames(data) == "nombre"] <- "COMUNA"
+data$COMUNA <- toupper(data$COMUNA)
 data$geometry <- NULL
 
 str(data)
