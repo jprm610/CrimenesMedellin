@@ -123,3 +123,66 @@ str(data)
 ```{r}
 write.csv(data, file = "../data/homicidios.csv", row.names = FALSE)
 ```
+
+# Análisis datos imputados
+
+Calcular la proporción de datos imputados por año
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+Obtenemos los datasets
+```{r}
+homicidios_orig <- read.csv("../data/original/homicidios.csv", na.strings = c("Sin dato", "NaN", "nan", "None"), stringsAsFactors = FALSE)
+homicidios_clean <- data
+```
+
+Asegurar que la columna de fecha está en formato Date
+```{r}
+homicidios_orig <- homicidios_orig %>%
+  mutate(AÑO = year(as.Date(fecha_hecho, format = "%Y-%m-%d")))
+
+homicidios_clean <- homicidios_clean %>%
+  mutate(AÑO = year(as.Date(FECHA_HECHO, format = "%Y-%m-%d")))
+```
+
+Contar homicidios por año en cada dataset
+```{r}
+conteo_orig <- homicidios_orig %>%
+  group_by(AÑO) %>%
+  summarise(total_original = n())
+
+conteo_clean <- homicidios_clean %>%
+  group_by(AÑO) %>%
+  summarise(total_limpio = n())
+```
+
+Unir ambas tablas
+```{r}
+comparacion <- full_join(conteo_orig, conteo_clean, by = "AÑO") %>%
+  mutate(
+    imputados = total_limpio - total_original,
+    proporcion_imputados = abs(imputados / total_limpio)
+  )
+
+print(comparacion)
+```
+
+Visualización
+```{r}
+grafica_proporcion <- ggplot(comparacion, aes(x = AÑO, y = proporcion_imputados)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = "Proporción de Registros Imputados por Año",
+    x = "Año",
+    y = "Proporción de Datos Imputados"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + # Mostrar en porcentaje
+  theme_minimal()
+
+ggsave("../figures/Registros_imputados.png", grafica_proporcion, width = 8, height = 6, dpi = 300)
+```
+
