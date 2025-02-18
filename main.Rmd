@@ -4,15 +4,18 @@ output: html_notebook
 ---
 # Andrés Felipe García Orrego - Juan Pablo Robledo Meza
 # Introducción
-La violecia en Medellín es un problema de larga data, el cual ha tenido momentos criticos que han generado grandes procesos sociales en la ciudad sin embargo esto no se ve reflejado en modelos basados en datos para la construccion de politicas publicas orientadas a un manejo mas tecnico de los delitos violentos en la ciudad, en particular los homicidios son crimenes razonablemente bien documentados y de alto impacto para la opinión publica y la ciudad, por lo cual decidimos construir un **Modelo espacio-temporal bayesiano** que estime el riesgo de homicidio usando INLA.
-Con el fin de responer las siguientes preguntas:
+La violencia en Medellín es un problema de larga data, el cual ha tenido momentos críticos que han generado grandes procesos sociales en la ciudad. Sin embargo, esto no se ve reflejado en modelos basados en datos para la construcción de políticas públicas orientadas a un manejo más técnico de los delitos violentos en la ciudad. En particular, los homicidios son crímenes razonablemente bien documentados y de alto impacto para la opinión pública y la ciudad, por lo cual decidimos construir un modelo espacio-temporal bayesiano que estime el riesgo de homicidio usando INLA, con el fin de responder las siguientes preguntas.
 
 # Preguntas
-  - **Riesgo de homicidio en un lugar de Medellín**.
-  - **Puntos calientes.**
-  - **¿Cuando hay mas riesgo?**
-  - **Presencia policial vs riesgo.**
-  - **Metricas para estos tipos de modelos.**
+  - **¿Cuál es el riesgo de homicidio en un lugar específico en Medellín**.
+  - **¿Dónde se encuentran los Puntos calientes de violencia?**
+  - **¿En qué momentos del año o del día hay mayor riesgo de homicidio?**
+  - **¿Cómo influye la presencia policial en la reducción del riesgo de homicidios?.**
+  - **¿Cuáles son las métricas más adecuadas para evaluar este tipo de modelos?.**
+  
+
+
+
   
 # Limpieza y Preparación de los Datos de Homicidios en Medellín:
 
@@ -140,15 +143,62 @@ ggplot() +
   annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
 ```
 
+## Ultimo año
+```{r}
+ultimo_año <- max(homicidios$AÑO, na.rm = TRUE)
+homicidios_recientes <- homicidios %>%
+  filter(AÑO == ultimo_año)
+homicidios_sf <- st_as_sf(homicidios_recientes, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+
+# Transformar a CRS de Medellín (MAGNA-SIRGAS) si es necesario
+homicidios_sf <- st_transform(homicidios_sf, st_crs(medellin_mapa))
+
+
+
+
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
+  geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6, size = 1) +  # Puntos de homicidios del último año
+  scale_color_brewer(palette = "Set1") +  # Colores diferenciados
+  theme_minimal() +
+  labs(title = paste("Mapa de Homicidios en Medellín - Año", ultimo_año),
+       color = "Modalidad") +
+  annotation_scale(location = "br") + 
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+
+```
 ## Cuadrantes de Policía
 ```{r}
 # FALTA QUE DANIEL NOS PASE LOS DATOS
 ```
 
+## Analisís bivariado de los datos:
+
+```{r}
+library(ggplot2)
+
+ggplot(homicidios, aes(x = EDAD, fill = SEXO)) +
+  geom_histogram(binwidth = 5, alpha = 0.6, position = "identity", color = "black") +
+  scale_x_continuous(breaks = seq(min(homicidios$EDAD, na.rm=TRUE), 
+                                  max(homicidios$EDAD, na.rm=TRUE), 
+                                  by = 5)) +
+  labs(title = "Distribución de Edades de las Víctimas por Género", 
+       x = "Edad", 
+       y = "Frecuencia", 
+       fill = "Género") +
+  theme_minimal()
+```
+
+##Homicidios por sectores.
 
 
+```{r}
+head(homicidios_sf)
 
-
+```
 
 # Modelo Estadístico
   Nos basaremos en el documento https://www.dspace.espol.edu.ec/bitstream/123456789/56598/1/T-110414%20CLAUDIA%20RODR%C3%8DGUEZ%20MENDEZ%20Y%20SAMANTHA%20ORTIZ%20SANTAMARIA%20INGENIERA%20ESTADISTICA.pdf?.com. En el cual se propone un modelo similar para la cuidadd de Guayaquil en ecuador, debido a que encontramos caracteristicas importantes en comun, entre ellas el numero de habitantes y el tamaño del area metropolitana. Ademas de condiciones cultares, sociales y delictivas similares
