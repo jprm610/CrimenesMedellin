@@ -1,0 +1,30 @@
+---
+title: "06_barrios"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(ggplot2)
+```
+
+```{r}
+# Leer el archivo GeoJSON
+barrios <- st_read("../data/barrios_y_veredas.geojson")
+```
+
+```{r}
+# Graficar el archivo GeoJSON
+ggplot(data = barrios) +
+  geom_sf() + 
+  theme_minimal() +
+  labs(title = "Mapa con GeoJSON")
+```
+
+```{r}
+str(barrios)
+```
+
+```{r}
+unique(barrios$codigo)
+```

@@ -1,0 +1,351 @@
+---
+title: "Riesgo de Homicidio en Medellín"
+output: html_notebook
+---
+# Andrés Felipe García Orrego - Juan Pablo Robledo Meza
+# Introducción
+La violencia en Medellín es un problema de larga data, el cual ha tenido momentos críticos que han generado grandes procesos sociales en la ciudad. Sin embargo, esto no se ve reflejado en modelos basados en datos para la construcción de políticas públicas orientadas a un manejo más técnico de los delitos violentos en la ciudad. En particular, los homicidios son crímenes razonablemente bien documentados y de alto impacto para la opinión pública y la ciudad, por lo cual decidimos construir un modelo espacio-temporal bayesiano que estime el riesgo de homicidio usando INLA, con el fin de responder las siguientes preguntas.
+
+# Preguntas
+  - **¿Cuál es el riesgo de homicidio en un lugar específico en Medellín**.
+  - **¿Dónde se encuentran los Puntos calientes de violencia?**
+  - **¿En qué momentos del año o del día hay mayor riesgo de homicidio?**
+  - **¿Cómo influye la presencia policial en la reducción del riesgo de homicidios?.**
+  - **¿Cuáles son las métricas más adecuadas para evaluar este tipo de modelos?.**
+  
+
+
+
+  
+# Limpieza y Preparación de los Datos de Homicidios en Medellín:
+
+Para garantizar la calidad y pertinencia de los datos en nuestro análisis del riesgo de homicidios en Medellín, realizamos un proceso de limpieza de la base de datos descargada de MeData, que contenía 19,647 registros y 36 columnas.
+
+## Eliminación de Columnas Irrelevantes
+
+Identificamos columnas con valores únicos o sin información relevante para el análisis:
+
+**Columnas con valores constantes**: (CANTIDAD, CONDUCTA, FECHA_INGESTION)
+
+**Columnas con alta cantidad de valores NA**: (GRUPO_ACTOR, ACTIVIDAD_DELICTIVA, DISCAPACIDAD, TESTIGO, entre otras)
+
+
+Todas estas columnas fueron eliminadas, ya que no aportaban información adicional.
+
+## Selección de Variables Clave.
+
+Tras la limpieza, seleccionamos las variables más relevantes para el análisis:
+- LATITUD, LONGITUD → Ubicación geográfica del homicidio.
+
+
+- SEXO, EDAD → Características de la víctima.
+
+
+- MODALIDAD → Forma en que ocurrió el hecho.
+
+- NOMBRE_BARRIO, CODIGO_BARRIO, CODIGO_COMUNA  Ubicación administrativa.
+
+- LUGAR → Tipo de espacio donde ocurrió el homicidio.
+
+Con estos datos estructurados, podemos proceder al análisis espacio-temporal del riesgo de homicidios en la ciudad.
+
+## Resultado
+
+Teniendo finalmente **18516 registros y 10 columnas**
+
+# Primer análisis
+```{r}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(forcats)
+library(sf)
+library(ggmap)
+library(ggspatial)
+library(RColorBrewer)
+```
+
+```{r}
+medellin_mapa <- st_read("data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
+```
+
+
+## Homicidios
+```{r}
+homicidios <- read.csv("data/homicidios.csv")
+
+# Para analisis temporal
+homicidios$FECHA_HECHO <- ymd_hms(homicidios$FECHA_HECHO)
+homicidios$AÑO <- year(homicidios$FECHA_HECHO)
+homicidios$MES <- month(homicidios$FECHA_HECHO, label = TRUE, abbr = TRUE)
+
+summary(homicidios)
+```
+
+### Generalidades
+#### Modalidad de Homicidio
+```{r}
+modalidad <- ggplot(homicidios, aes(y = fct_infreq(MODALIDAD))) +
+  geom_bar(fill = "purple") +
+  theme_minimal() +
+  labs(title = "Frecuencia de homicidios por modalidad", x = "Cantidad", y = "Modalidad")
+
+ggsave("figures/modalidad.png", modalidad, width = 8, height = 6, dpi = 300)
+```
+
+#### Homicidios por género
+```{r}
+# Calcular el total y los porcentajes
+data_pie <- homicidios %>%
+  count(SEXO) %>%
+  mutate(perc = round(n / sum(n) * 100, 1))  # Redondear a 1 decimal
+
+# Gráfico circular con etiquetas
+genero <- ggplot(data_pie, aes(x = "", y = n, fill = SEXO)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(perc, "%")), 
+            position = position_stack(vjust = 0.5), size = 5, color = "white") +  # Etiquetas centradas
+  theme_minimal() +
+  labs(title = "Distribución de homicidios por género", x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), panel.grid = element_blank())
+
+ggsave("figures/genero.png", genero, width = 8, height = 6, dpi = 300)
+```
+
+#### Distribución edad de las víctimas
+```{r}
+ggplot(homicidios, aes(x = EDAD)) +
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribución de la edad de las víctimas", x = "Edad", y = "Frecuencia")
+```
+
+
+### Análisis Temporal
+#### Homicidios por año
+```{r}
+porAño <- ggplot(homicidios, aes(x = as.factor(AÑO))) +
+  geom_bar(fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Número de homicidios por año", x = "Año", y = "Cantidad de homicidios")
+
+ggsave("figures/por_año.png", porAño, width = 8, height = 6, dpi = 300)
+```
+
+#### Homicidios por mes del año
+```{r}
+porMes <- ggplot(homicidios, aes(x = MES)) +
+  geom_bar(fill = "darkred") +
+  theme_minimal() +
+  labs(title = "Número de homicidios por mes", x = "Mes", y = "Cantidad de homicidios")
+
+ggsave("figures/por_mes.png", porMes, width = 8, height = 6, dpi = 300)
+```
+
+#### Homicidios por días del año
+```{r}
+# Extraer el día y mes de cada homicidio
+homicidios <- homicidios %>%
+  mutate(DIA = day(as.Date(FECHA_HECHO, format = "%Y-%m-%d")),
+         MES = month(as.Date(FECHA_HECHO, format = "%Y-%m-%d"), label = TRUE, abbr = FALSE))
+
+# Contar homicidios por combinación de día y mes
+conteo_dia_mes <- homicidios %>%
+  count(DIA, MES) %>%
+  arrange(desc(n))
+
+# Día y mes con más homicidios
+dia_mes_max_homicidios <- conteo_dia_mes %>% slice(1:5)
+
+print(dia_mes_max_homicidios)
+
+```
+
+
+### Análisis espacial
+```{r}
+homicidios_sf <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+```
+
+#### Distribución de Homicidios por modalidad
+```{r}
+mapa_mod <- ggplot() +
+  geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
+  geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6) +  # Homicidios
+  scale_color_brewer(palette = "Paired") +  # Paleta de colores con 11 categorías
+  theme_minimal() +
+  labs(title = "Mapa de homicidios por modalidad", color = "Modalidad") +
+  annotation_scale(location = "br") + 
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+
+ggsave("figures/homicidios_modalidad_mapa.png", mapa_mod, width = 8, height = 6, dpi = 300)
+```
+
+## Ultimo año
+```{r}
+ultimo_año <- max(homicidios$AÑO, na.rm = TRUE)
+homicidios_recientes <- homicidios %>%
+  filter(AÑO == ultimo_año)
+homicidios_sf <- st_as_sf(homicidios_recientes, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+
+# Transformar a CRS de Medellín (MAGNA-SIRGAS) si es necesario
+homicidios_sf <- st_transform(homicidios_sf, st_crs(medellin_mapa))
+
+
+
+
+```
+
+```{r}
+homs_2023 <- ggplot() +
+  geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
+  geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6, size = 1) +  # Puntos de homicidios del último año
+  scale_color_brewer(palette = "Set1") +  # Colores diferenciados
+  theme_minimal() +
+  labs(title = paste("Mapa de Homicidios en Medellín - Año", ultimo_año),
+       color = "Modalidad") +
+  annotation_scale(location = "br") + 
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+
+ggsave("figures/homicidios_2023.png", homs_2023, width = 8, height = 6, dpi = 300)
+```
+
+
+```{r}
+unique(homicidios_recientes$COMUNA)
+```
+
+```{r}
+poblacion <- read.csv("data/poblacion.csv")
+poblacion
+```
+
+```{r}
+library(dplyr)
+
+año = 2023
+
+homicidios_recientes <- homicidios %>%
+  filter(AÑO == año)
+homicidios_sf <- st_as_sf(homicidios_recientes, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+
+homicidios_por_comuna <- homicidios_recientes %>%
+  count(COMUNA)
+
+# Unir con la población
+homicidios_tasa <- homicidios_por_comuna %>%
+  left_join(poblacion, by = "COMUNA") %>%
+  mutate(TASA_HOMICIDIOS = ((n / TOTAL_2023) * 100000))
+
+homicidios_tasa
+```
+
+```{r}
+medellin_mapa <- st_read("data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
+
+medellin_mapa <- medellin_mapa %>%
+  rename(COMUNA = nombre)
+
+# Unir con el shapefile de las comunas
+medellin_mapa <- medellin_mapa %>%
+  left_join(homicidios_tasa, by = "COMUNA")
+```
+
+
+```{r}
+# Graficar el mapa
+library(ggplot2)
+
+tasa_2023 <- ggplot(medellin_mapa) +
+  geom_sf(aes(fill = TASA_HOMICIDIOS), color = "white") +  
+  scale_fill_gradient(low = "green", high = "red", na.value = "green") +  
+  theme_minimal() +
+  labs(title = "Tasa de homicidios por cada 100.000 habitantes en Medellín (2023)",
+       fill = "Homicidios por 100.000 hab.")
+
+ggsave("figures/tasa_2023.png", tasa_2023, width = 8, height = 6, dpi = 300)
+```
+
+
+## Cuadrantes de Policía
+```{r}
+# FALTA QUE DANIEL NOS PASE LOS DATOS
+```
+
+## Analisís bivariado de los datos:
+
+```{r}
+library(ggplot2)
+
+edad <- ggplot(homicidios, aes(x = EDAD, fill = SEXO)) +
+  geom_histogram(binwidth = 5, alpha = 0.6, position = "identity", color = "black") +
+  scale_x_continuous(breaks = seq(min(homicidios$EDAD, na.rm=TRUE), 
+                                  max(homicidios$EDAD, na.rm=TRUE), 
+                                  by = 5)) +
+  labs(title = "Distribución de Edades de las Víctimas por Género", 
+       x = "Edad", 
+       y = "Frecuencia", 
+       fill = "Género") +
+  theme_minimal()
+
+ggsave("figures/edad.png", edad, width = 8, height = 6, dpi = 300)
+```
+
+##Homicidios por sectores.
+
+
+```{r}
+head(homicidios_sf)
+
+```
+
+# Modelo Estadístico
+  Nos basaremos en el documento https://www.dspace.espol.edu.ec/bitstream/123456789/56598/1/T-110414%20CLAUDIA%20RODR%C3%8DGUEZ%20MENDEZ%20Y%20SAMANTHA%20ORTIZ%20SANTAMARIA%20INGENIERA%20ESTADISTICA.pdf?.com. En el cual se propone un modelo similar para la cuidadd de Guayaquil en ecuador, debido a que encontramos caracteristicas importantes en comun, entre ellas el numero de habitantes y el tamaño del area metropolitana. Ademas de condiciones cultares, sociales y delictivas similares
+ El modelo seguirá un enfoque **jerárquico bayesiano**, con una **distribución Poisson** para los homicidios y un predictor que incluye efectos espaciales, temporales y covariables por ultimo la estimación se hara siguiendo el metodo INLA (El cual resulta más rápido para modelos espacio temporales). 
+ 
+$$Y_{i,t}= Poisson(\lambda_{i,t})$$.
+
+Donde: 
+- $Y_{i,t}$ es el número de homicidios en la comuna i en el tiempo t 
+
+
+- $\lambda_{i,t}$ es la **Tasa esperada de homicidios** en la comuna i en el tiempo t
+
+
+Nuestro modelo lineal predictor se define como:
+
+
+ $log(\lambda_{i,t})=\beta_0+\beta_{policia}x_{policia,i,t}+f(espacio)+f(tiempo)+f(espacio-tiempo)$
+ 
+ Donde:
+ 
+$\beta_0$: Intercepto general
+
+
+$x_{policia,i,t}$: Cantidad de estaciones de policia en la comuna i en el tiempo t
+
+
+$\beta_{policia}$: Efecto de la presencia policial sobre los homicidios
+ 
+ 
+$f(espacio)$: Efecto espacial que modela **dependencias geográficas**
+
+
+$f(tiempo$: Efecto temporal que captura **tendencias en el  tiempo** (Puede ser una serie de tiempo)
+
+
+$f(espacio-tiempo)$: Interacción espacio temporal para modelar **cómo varían los homicidios de cada comuna a lo largo del tiempo**
+
+
+# Siguientes pasos:
+- Obtener datos poblacionales de las comunas.
+- Obtener información acerca de los cuadrante.
+- Análisis bivariado de los datos.
+- Implementar INLA
+- Analizar resultados y storing telling
+```{r}
+ 
+```
+
