@@ -86,18 +86,32 @@ summary(homicidios)
 ### Generalidades
 #### Modalidad de Homicidio
 ```{r}
-ggplot(homicidios, aes(y = fct_infreq(MODALIDAD))) +
+modalidad <- ggplot(homicidios, aes(y = fct_infreq(MODALIDAD))) +
   geom_bar(fill = "purple") +
   theme_minimal() +
   labs(title = "Frecuencia de homicidios por modalidad", x = "Cantidad", y = "Modalidad")
+
+ggsave("figures/modalidad.png", modalidad, width = 8, height = 6, dpi = 300)
 ```
 
 #### Homicidios por género
 ```{r}
-ggplot(homicidios, aes(x = SEXO)) +
-  geom_bar(fill = "orange") +
+# Calcular el total y los porcentajes
+data_pie <- homicidios %>%
+  count(SEXO) %>%
+  mutate(perc = round(n / sum(n) * 100, 1))  # Redondear a 1 decimal
+
+# Gráfico circular con etiquetas
+genero <- ggplot(data_pie, aes(x = "", y = n, fill = SEXO)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(perc, "%")), 
+            position = position_stack(vjust = 0.5), size = 5, color = "white") +  # Etiquetas centradas
   theme_minimal() +
-  labs(title = "Distribución de homicidios por género", x = "Género", y = "Cantidad")
+  labs(title = "Distribución de homicidios por género", x = NULL, y = NULL) +
+  theme(axis.text = element_blank(), axis.ticks = element_blank(), panel.grid = element_blank())
+
+ggsave("figures/genero.png", genero, width = 8, height = 6, dpi = 300)
 ```
 
 #### Distribución edad de las víctimas
@@ -112,19 +126,43 @@ ggplot(homicidios, aes(x = EDAD)) +
 ### Análisis Temporal
 #### Homicidios por año
 ```{r}
-ggplot(homicidios, aes(x = as.factor(AÑO))) +
+porAño <- ggplot(homicidios, aes(x = as.factor(AÑO))) +
   geom_bar(fill = "steelblue") +
   theme_minimal() +
   labs(title = "Número de homicidios por año", x = "Año", y = "Cantidad de homicidios")
+
+ggsave("figures/por_año.png", porAño, width = 8, height = 6, dpi = 300)
 ```
 
 #### Homicidios por mes del año
 ```{r}
-ggplot(homicidios, aes(x = MES)) +
+porMes <- ggplot(homicidios, aes(x = MES)) +
   geom_bar(fill = "darkred") +
   theme_minimal() +
   labs(title = "Número de homicidios por mes", x = "Mes", y = "Cantidad de homicidios")
+
+ggsave("figures/por_mes.png", porMes, width = 8, height = 6, dpi = 300)
 ```
+
+#### Homicidios por días del año
+```{r}
+# Extraer el día y mes de cada homicidio
+homicidios <- homicidios %>%
+  mutate(DIA = day(as.Date(FECHA_HECHO, format = "%Y-%m-%d")),
+         MES = month(as.Date(FECHA_HECHO, format = "%Y-%m-%d"), label = TRUE, abbr = FALSE))
+
+# Contar homicidios por combinación de día y mes
+conteo_dia_mes <- homicidios %>%
+  count(DIA, MES) %>%
+  arrange(desc(n))
+
+# Día y mes con más homicidios
+dia_mes_max_homicidios <- conteo_dia_mes %>% slice(1:5)
+
+print(dia_mes_max_homicidios)
+
+```
+
 
 ### Análisis espacial
 ```{r}
@@ -133,7 +171,7 @@ homicidios_sf <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = 4
 
 #### Distribución de Homicidios por modalidad
 ```{r}
-ggplot() +
+mapa_mod <- ggplot() +
   geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
   geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6) +  # Homicidios
   scale_color_brewer(palette = "Paired") +  # Paleta de colores con 11 categorías
@@ -141,6 +179,8 @@ ggplot() +
   labs(title = "Mapa de homicidios por modalidad", color = "Modalidad") +
   annotation_scale(location = "br") + 
   annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+
+ggsave("figures/homicidios_modalidad_mapa.png", mapa_mod, width = 8, height = 6, dpi = 300)
 ```
 
 ## Ultimo año
@@ -159,7 +199,7 @@ homicidios_sf <- st_transform(homicidios_sf, st_crs(medellin_mapa))
 ```
 
 ```{r}
-ggplot() +
+homs_2023 <- ggplot() +
   geom_sf(data = medellin_mapa, fill = "gray90", color = "black") +  # Mapa base
   geom_sf(data = homicidios_sf, aes(color = MODALIDAD), alpha = 0.6, size = 1) +  # Puntos de homicidios del último año
   scale_color_brewer(palette = "Set1") +  # Colores diferenciados
@@ -169,7 +209,11 @@ ggplot() +
   annotation_scale(location = "br") + 
   annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
 
+ggsave("figures/homicidios_2023.png", homs_2023, width = 8, height = 6, dpi = 300)
 ```
+
+
+
 ## Cuadrantes de Policía
 ```{r}
 # FALTA QUE DANIEL NOS PASE LOS DATOS
@@ -180,7 +224,7 @@ ggplot() +
 ```{r}
 library(ggplot2)
 
-ggplot(homicidios, aes(x = EDAD, fill = SEXO)) +
+edad <- ggplot(homicidios, aes(x = EDAD, fill = SEXO)) +
   geom_histogram(binwidth = 5, alpha = 0.6, position = "identity", color = "black") +
   scale_x_continuous(breaks = seq(min(homicidios$EDAD, na.rm=TRUE), 
                                   max(homicidios$EDAD, na.rm=TRUE), 
@@ -190,6 +234,8 @@ ggplot(homicidios, aes(x = EDAD, fill = SEXO)) +
        y = "Frecuencia", 
        fill = "Género") +
   theme_minimal()
+
+ggsave("figures/edad.png", edad, width = 8, height = 6, dpi = 300)
 ```
 
 ##Homicidios por sectores.
