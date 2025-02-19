@@ -23,6 +23,6 @@ homicidios <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = coor
 
 
 ```{r}
-barrios <- st_read("data/barrios_y_veredas.geojson")
+barrios <- st_read("data/barrios.geojson")
 barrios <- st_transform(barrios, crs=coords_sys)
 ```
