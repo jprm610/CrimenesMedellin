@@ -213,6 +213,61 @@ ggsave("figures/homicidios_2023.png", homs_2023, width = 8, height = 6, dpi = 30
 ```
 
 
+```{r}
+unique(homicidios_recientes$COMUNA)
+```
+
+```{r}
+poblacion <- read.csv("data/poblacion.csv")
+poblacion
+```
+
+```{r}
+library(dplyr)
+
+año = 2023
+
+homicidios_recientes <- homicidios %>%
+  filter(AÑO == año)
+homicidios_sf <- st_as_sf(homicidios_recientes, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+
+homicidios_por_comuna <- homicidios_recientes %>%
+  count(COMUNA)
+
+# Unir con la población
+homicidios_tasa <- homicidios_por_comuna %>%
+  left_join(poblacion, by = "COMUNA") %>%
+  mutate(TASA_HOMICIDIOS = ((n / TOTAL_2023) * 100000))
+
+homicidios_tasa
+```
+
+```{r}
+medellin_mapa <- st_read("data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
+
+medellin_mapa <- medellin_mapa %>%
+  rename(COMUNA = nombre)
+
+# Unir con el shapefile de las comunas
+medellin_mapa <- medellin_mapa %>%
+  left_join(homicidios_tasa, by = "COMUNA")
+```
+
+
+```{r}
+# Graficar el mapa
+library(ggplot2)
+
+tasa_2023 <- ggplot(medellin_mapa) +
+  geom_sf(aes(fill = TASA_HOMICIDIOS), color = "white") +  
+  scale_fill_gradient(low = "green", high = "red", na.value = "green") +  
+  theme_minimal() +
+  labs(title = "Tasa de homicidios por cada 100.000 habitantes en Medellín (2023)",
+       fill = "Homicidios por 100.000 hab.")
+
+ggsave("figures/tasa_2023.png", tasa_2023, width = 8, height = 6, dpi = 300)
+```
+
 
 ## Cuadrantes de Policía
 ```{r}
