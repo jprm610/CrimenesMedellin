@@ -25,11 +25,10 @@ str(barrios)
 
 
 ```{r}
-# Graficar el archivo GeoJSON
 barrios_mapa <- ggplot(data = barrios) +
   geom_sf() + 
   theme_minimal() +
-  labs(title = "Mapa con GeoJSON")
+  labs(title = "Limites barrios Medellín")
 barrios_mapa
 
 ggsave("../figures/barrios_mapa.png", barrios_mapa, width = 8, height = 6, dpi = 300)
