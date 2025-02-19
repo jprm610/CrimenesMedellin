@@ -6,10 +6,12 @@ output: html_document
 ```{r}
 library(osmdata)
 library(sf)
+library(dplyr)
+library(ggplot2)
 ```
 
 ```{r}
-medellin_mapa <- st_read("../data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
+barrios <- st_read("../data/barrios.geojson")
 ```
 
 
@@ -24,17 +26,29 @@ plot(estaciones_sf["geometry"])
 ```
 
 ```{r}
-library(ggplot2)
-library(sf)
+str(estaciones_sf)
 ```
-
+```{r}
+estaciones_sf <- estaciones_sf %>% select(osm_id, geometry)
+colnames(estaciones_sf) <- toupper(colnames(estaciones_sf))
+colnames(estaciones_sf)[colnames(estaciones_sf) == "OSM_ID"] <- "ID"
+colnames(estaciones_sf)[colnames(estaciones_sf) == "GEOMETRY"] <- "geometry"
+str(estaciones_sf)
+```
 ```{r}
 policia <- ggplot() +
-  geom_sf(data = medellin_mapa, fill = "gray90", color = "black", alpha = 0.7) +  # Mapa base
+  geom_sf(data = barrios, fill = "gray90", color = "black", alpha = 0.7) +  # Mapa base
   geom_sf(data = estaciones_sf, color = "red", size = 2) +  # Estaciones de policía
   labs(title = "Estaciones de Policía en Medellín",
        caption = "Fuente: OpenStreetMap") +
   theme_minimal()
+policia
 
 ggsave("../figures/policia.png", policia, width = 8, height = 6, dpi = 300)
 ```
+
+
+```{r}
+st_write(estaciones_sf, "../data/policia.geojson", delete_dsn = TRUE)
+```
+

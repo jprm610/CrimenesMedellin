@@ -38,3 +38,7 @@ estratos_mapa
 ggsave("../figures/estratos_mapa.png", estratos_mapa, width = 8, height = 6, dpi = 300)
 ```
 
+```{r}
+st_write(estratos, "../data/estratos.geojson", delete_dsn = TRUE)
+```
+
