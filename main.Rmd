@@ -218,15 +218,56 @@ str(homicidios_final)  # Verifica tipos de datos
 ```
 
 ```{r}
-homicidios_final$COMUNA <- as.factor(homicidios_final$COMUNA)
-homicidios_final$MES <- as.factor(homicidios_final$MES)
-homicidios_final$AÑO <- as.factor(homicidios_final$AÑO)
-homicidios_final$ESTRATO <- as.factor(homicidios_final$ESTRATO)
-
-str(homicidios_final)
-```
-
-```{r}
 write.csv(homicidios_final, "data/homicidios_final.csv", row.names = FALSE)
 ```
 
+# Modelo Poisson y Método INLA
+
+## Matriz de Adyacencia
+```{r}
+comunas_sf <- st_read("data/comunas.geojson")
+comunas_sf <- st_transform(comunas_sf, crs=coords_sys)
+plot(st_geometry(comunas_sf))
+```
+
+```{r}
+comunas_sf <- comunas_sf %>%
+  rename(COMUNA = nombre)  # Ajustar nombre si es necesario
+comunas_sf
+```
+
+```{r}
+library(spdep)
+
+# Crear lista de vecinos
+vecinos <- poly2nb(comunas_sf)
+
+# Ver estructura
+summary(vecinos)
+
+# Graficar comunas y conexiones
+plot(st_geometry(comunas_sf), border = "gray")  # Dibuja comunas
+plot(vecinos, st_coordinates(st_centroid(comunas_sf)), add = TRUE, col = "red")  # Dibuja conexiones
+```
+
+```{r}
+# Guardar la matriz de adyacencia en formato INLA
+nb2INLA("data/matriz_adj.adj", vecinos)
+```
+
+## Datos de homicidios para INLA
+```{r}
+homicidios <- read.csv("data/homicidios_final.csv")
+str(homicidios)
+```
+
+```{r}
+homicidios$COMUNA <- as.factor(homicidios$COMUNA)
+homicidios$MES <- as.factor(homicidios$MES)
+homicidios$AÑO <- as.factor(homicidios$AÑO)
+homicidios$ESTRATO <- as.factor(homicidios$ESTRATO)
+
+str(homicidios)
+```
+
+## Definición del Modelo y Método INLA
