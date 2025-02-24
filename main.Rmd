@@ -237,6 +237,11 @@ comunas_sf
 ```
 
 ```{r}
+comunas_sf$OBJECTID
+```
+
+
+```{r}
 library(spdep)
 
 # Crear lista de vecinos
@@ -251,9 +256,9 @@ plot(vecinos, st_coordinates(st_centroid(comunas_sf)), add = TRUE, col = "red") 
 ```
 
 ```{r}
-# Guardar la matriz de adyacencia en formato INLA
 nb2INLA("data/matriz_adj.adj", vecinos)
 ```
+
 
 ## Datos de homicidios para INLA
 ```{r}
@@ -262,12 +267,60 @@ str(homicidios)
 ```
 
 ```{r}
-homicidios$COMUNA <- as.factor(homicidios$COMUNA)
+# Asegurar que OBJECTID sea numérico
+comunas_sf$OBJECTID <- as.numeric(comunas_sf$OBJECTID)
+
+# Unir OBJECTID a homicidios
+homicidios <- homicidios %>%
+  left_join(comunas_sf %>% select(COMUNA, OBJECTID), by = "COMUNA")
+
+homicidios
+```
+
+
+```{r}
+homicidios$COMUNA <- as.factor(homicidios$OBJECTID)
 homicidios$MES <- as.factor(homicidios$MES)
 homicidios$AÑO <- as.factor(homicidios$AÑO)
 homicidios$ESTRATO <- as.factor(homicidios$ESTRATO)
+homicidios$COMUNA_TIEMPO <- as.factor(paste(homicidios$OBJECTID, homicidios$AÑO, sep = "_"))
+homicidios$POBLACION <- homicidios$POBLACION / 1000
+#homicidios$OBJECTID <- as.factor(homicidios$OBJECTID)
 
 str(homicidios)
 ```
 
 ## Definición del Modelo y Método INLA
+```{r}
+adjacency_inla <- inla.read.graph("data/matriz_adj.adj")
+```
+
+```{r}
+modelo <- inla(
+  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION + f(MES, model = "rw1") +  
+                      f(ESTRATO, model = "rw1") +  
+                      f(OBJECTID, model = "besag", graph = adjacency_inla) +  
+                      f(COMUNA_TIEMPO, model = "iid"),
+  family = "poisson",
+  data = homicidios,
+  control.predictor = list(compute = TRUE)
+)
+```
+
+
+```{r}
+summary(modelo)
+```
+
+```{r}
+modelo$summary.fixed
+```
+
+```{r}
+modelo$summary.random$OBJECTID  # Efecto espacial
+```
+
+```{r}
+modelo$summary.random$MES  # Efecto temporal
+```
+
