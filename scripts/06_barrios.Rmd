@@ -17,12 +17,6 @@ barrios <- st_read("../data/original/barrios_y_veredas.geojson")
 str(barrios)
 ```
 
-```{r}
-names(barrios) <- toupper(names(barrios))
-names(barrios)[names(barrios) == "GEOMETRY"] <- "geometry"
-str(barrios)
-```
-
 
 ```{r}
 barrios_mapa <- ggplot(data = barrios) +

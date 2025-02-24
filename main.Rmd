@@ -14,8 +14,115 @@ coords_sys = 4326
 library(ggplot2)
 library(sf)
 library(lubridate)
+library(dplyr)
+library(modeest)
+library(tidyr)
 ```
+
 # Importar datos
+
+```{r}
+#barrios <- st_read("data/barrios.geojson")
+#barrios <- st_transform(barrios, crs=coords_sys)
+
+comunas <- st_read("data/comunas.geojson")
+comunas <- st_transform(comunas, crs=coords_sys)
+```
+
+```{r}
+policia <- st_read("data/policia.geojson")
+policia <- st_transform(policia, crs=coords_sys)
+```
+
+```{r}
+predios <- st_read("data/predios.geojson")
+predios <- st_transform(predios, crs=coords_sys)
+predios <- st_make_valid(predios)
+```
+
+# Preparación de los Datos para el Modelo
+
+## Estratos por Comuna
+
+```{r}
+estratos_mapa <- ggplot() +
+  geom_sf(data = comunas, fill = NA, color = "black", size = 0.5) +  # Contorno de barrios
+  geom_sf(data = predios, aes(fill = factor(estrato)), alpha = 0.5) +  # Estratos con color
+  scale_fill_viridis_d(name = "Estrato") +  # Escala de color para los estratos
+  theme_minimal() +
+  labs(title = "Mapa de Comunas y Estratos")
+estratos_mapa
+```
+
+```{r}
+interseccion <- st_intersects(comunas, predios, sparse = FALSE)
+```
+
+```{r}
+comunas_predios <- st_intersection(predios, comunas) %>%
+  mutate(AREA = st_area(geometry))  # Calcula área después de la intersección
+comunas_predios
+```
+
+```{r}
+estrato_comunas <- comunas_predios %>%
+  group_by(comuna) %>%
+  summarise(
+    ESTRATO_PONDERADO = sum(as.numeric(AREA) * estrato) / sum(as.numeric(AREA))
+  ) %>%
+  mutate(ESTRATO = round(ESTRATO_PONDERADO)) %>%
+  select(comuna, ESTRATO)
+estrato_comunas
+```
+
+```{r}
+comunas <- comunas %>%
+  left_join(st_drop_geometry(estrato_comunas), by = "comuna")
+comunas
+```
+
+```{r}
+ggplot(comunas) +
+  geom_sf(aes(fill = as.factor(ESTRATO)), color = "black", linewidth = 0.3) +
+  scale_fill_brewer(palette = "Blues", name = "Estrato") +
+  theme_minimal() +
+  labs(title = "Estrato Socioeconómico por Comuna en Medellín")
+```
+
+
+```{r}
+st_write(comunas, "data/comunas_estrato.geojson", delete_dsn = TRUE)
+```
+
+## Estaciones de Policía
+```{r}
+comunas <- st_read("data/comunas_estrato.geojson")
+```
+
+```{r}
+estaciones_por_comuna <- policia %>%
+  st_join(comunas, join = st_within) %>%  # Une estaciones con comunas en las que están contenidas
+  group_by(comuna) %>%  # Agrupa por comuna
+  summarise(POLICIAS = n())  # Cuenta las estaciones en cada comuna
+estaciones_por_comuna
+```
+
+```{r}
+estaciones_por_comuna <- estaciones_por_comuna %>%
+  st_drop_geometry()
+
+comunas <- comunas %>%
+  left_join(estaciones_por_comuna, by = "comuna") %>%
+  mutate(POLICIAS = replace_na(POLICIAS, 0))
+
+comunas
+```
+
+```{r}
+st_write(comunas, "data/comunas_estrato_policias.geojson")
+```
+
+## Homicidios por Comuna y por Mes
 ```{r}
 homicidios <- read.csv("data/homicidios.csv")
 homicidios <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = coords_sys)
@@ -23,6 +130,103 @@ homicidios <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = coor
 
 
 ```{r}
-barrios <- st_read("data/barrios.geojson")
-barrios <- st_transform(barrios, crs=coords_sys)
+comunas <- st_read("data/comunas_estrato_policias.geojson")
 ```
+
+```{r}
+homicidios$FECHA_HECHO <- as.Date(homicidios$FECHA_HECHO, format = "%Y-%m-%d")
+homicidios$AÑO <- year(homicidios$FECHA_HECHO)
+homicidios$MES <- month(homicidios$FECHA_HECHO)
+```
+
+```{r}
+homicidios <- homicidios %>%
+  filter(AÑO >= 2018)
+```
+
+
+```{r}
+homicidios_por_comuna_mes <- homicidios %>%
+  group_by(COMUNA, AÑO, MES) %>%
+  summarise(TOTAL_HOMICIDIOS = n(), .groups = "drop")
+homicidios_por_comuna_mes
+```
+
+## Agregar Población
+```{r}
+poblacion <- read.csv("data/poblacion.csv")
+```
+
+```{r}
+poblacion
+```
+
+```{r}
+poblacion <- poblacion %>%
+  pivot_longer(cols = starts_with("TOTAL_"), 
+               names_to = "AÑO", 
+               values_to = "POBLACION") %>%
+  mutate(AÑO = as.numeric(sub("TOTAL_", "", AÑO))) %>%  # Extraer el año como 
+  filter(AÑO >= 2018 & AÑO <= 2023)
+poblacion
+```
+
+```{r}
+homicidios_final <- homicidios_por_comuna_mes %>%
+  left_join(poblacion, by = c("COMUNA", "AÑO"))
+homicidios_final
+```
+
+```{r}
+comunas
+```
+
+```{r}
+comunas <- comunas %>%
+  rename(COMUNA = NOMBRE)  # Cambiar el nombre de la columna para que coincida
+comunas
+```
+
+```{r}
+comunas <- comunas %>%
+  st_drop_geometry()  # Elimina la información espacial
+```
+
+
+```{r}
+homicidios_final <- homicidios_final %>%
+  left_join(comunas, by = "COMUNA")
+homicidios_final
+```
+
+```{r}
+homicidios_final <- homicidios_final %>%
+  select(COMUNA, AÑO, MES, TOTAL_HOMICIDIOS, POBLACION, ESTRATO, POLICIAS)
+
+homicidios_final$geometry <- NULL
+homicidios_final
+```
+
+```{r}
+summary(homicidios_final)  # Muestra resúmenes estadísticos
+sum(is.na(homicidios_final))  # Cuenta cuántos valores NA hay
+colSums(is.na(homicidios_final))  # Muestra cuántos NA hay por columna
+```
+
+```{r}
+str(homicidios_final)  # Verifica tipos de datos
+```
+
+```{r}
+homicidios_final$COMUNA <- as.factor(homicidios_final$COMUNA)
+homicidios_final$MES <- as.factor(homicidios_final$MES)
+homicidios_final$AÑO <- as.factor(homicidios_final$AÑO)
+homicidios_final$ESTRATO <- as.factor(homicidios_final$ESTRATO)
+
+str(homicidios_final)
+```
+
+```{r}
+write.csv(homicidios_final, "data/homicidios_final.csv", row.names = FALSE)
+```
+

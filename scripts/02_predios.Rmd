@@ -1,0 +1,47 @@
+---
+title: "02_estratos"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(ggplot2)
+```
+
+```{r}
+predios <- st_read("../data/original/estrato_socioeconomico.geojson")
+str(predios)
+```
+
+```{r}
+predios <- st_transform(predios, crs=4326)
+str(predios)
+```
+
+```{r}
+predios <- predios[st_is_valid(predios), ]
+```
+
+
+```{r}
+barrios <- st_read("../data/barrios.geojson")
+barrios <- st_transform(barrios, crs=4326)
+```
+
+
+```{r}
+estratos_mapa <- ggplot() +
+  geom_sf(data = barrios, fill = NA, color = "black", size = 0.5) +  # Contorno de barrios
+  geom_sf(data = predios, aes(fill = factor(estrato)), alpha = 0.5) +  # Estratos con color
+  scale_fill_viridis_d(name = "Estrato") +  # Escala de color para los estratos
+  theme_minimal() +
+  labs(title = "Mapa de Barrios y Estratos")
+estratos_mapa
+
+ggsave("../figures/estratos_mapa.png", estratos_mapa, width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+st_write(predios, "../data/predios.geojson", delete_dsn = TRUE)
+```
+

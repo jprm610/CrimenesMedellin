@@ -1,0 +1,189 @@
+---
+title: "01_clean_homicidios"
+output: html_document
+---
+
+```{r}
+data <- read.csv("../data/original/homicidios.csv", na.strings = c("Sin dato", "NaN", "nan", "None"), stringsAsFactors = FALSE)
+
+dim(data) #=> 19647, 36
+```
+# Limpieza Básica
+Hallamos las columnas que tengan un solo valory las guardamos junto al valor
+```{r}
+colnames(data) <- toupper(colnames(data))
+columnas_valor_unico <- list()
+for (col in names(data)) {
+  valores_unicos <- unique(data[[col]])
+  
+  if (length(valores_unicos) == 1) {
+    columnas_valor_unico[[col]] <- valores_unicos
+  }
+}
+# Eliminamos dichas columnas
+data <- data[, !(names(data) %in% names(columnas_valor_unico))]
+cat("Se eliminaron las columnas:", paste(names(columnas_valor_unico), collapse = ", "), "\n")
+```
+Eliminar columnas cuya porporción de datos faltantes sea >= 40%
+```{r}
+nas_resumen <- list()
+N <- nrow(data)
+for (col in names(data)) {
+  cantidad_na <- sum(is.na(data[[col]]))
+  proporcion_na <- round((cantidad_na / N) * 100, 2)
+  nas_resumen[[col]] <- list(
+    cantidad = cantidad_na,
+    proporcion = proporcion_na
+  )
+}
+columnas_a_eliminar <- names(nas_resumen)[sapply(nas_resumen, function(x) x[["proporcion"]] >= 40)]
+data <- data[, !(names(data) %in% columnas_a_eliminar), drop = FALSE]
+cat("Se eliminaron las columnas:", paste(columnas_a_eliminar, collapse = ", "), "\n")
+```
+Eliminar los registros donde LATITUD y LONGITUD son NA
+```{r}
+n <- nrow(data[(is.na(data$LATITUD) & is.na(data$LONGITUD)), ])
+data <- data[!(is.na(data$LATITUD) & is.na(data$LONGITUD)), ]
+cat("Se eliminaron ", n, " registros donde LATITUD y LONGITUD son faltantes.\n")
+```
+Cambiar NAs en LUGAR por "Desconocido"
+```{r}
+library(dplyr)
+data <- data %>%
+  mutate(LUGAR = ifelse(is.na(LUGAR), "Desconocido", LUGAR))
+cat("Cambiamos los registros donde LUGAR es NA por 'Desconocido'")
+```
+Eliminar duplicados
+```{r}
+n <- nrow(data)
+data <- unique(data)
+cat("Eliminamos ", n - nrow(data), " registros duplicados.")
+
+data <- na.omit(data)
+```
+Eliminar homicidios en los cuales la víctima tenía -1 años.
+```{r}
+n = length(subset(data, EDAD == -1))
+
+data <- subset(data, EDAD != -1)
+cat("Eliminamos ", n, " registros con edades -1.")
+```
+
+```{r}
+str(data)
+```
+
+# Reasignación de Comunas
+```{r}
+library(sf)
+library(dplyr)
+```
+
+
+```{r}
+medellin_mapa <- st_read("../data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
+medellin_mapa <- st_transform(medellin_mapa, crs = 4326)
+```
+
+```{r}
+data_sf <- st_as_sf(data, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+```
+
+```{r}
+library(ggplot2)
+
+# Graficar los límites de las comunas
+ggplot() +
+  geom_sf(data = medellin_mapa, fill = NA, color = "black") +  # Mapa de comunas
+  geom_sf(data = data_sf, aes(color = "red"), size = 1, alpha = 0.5) +  # Puntos de homicidios
+  labs(title = "Mapa de homicidios y comunas de Medellín") +
+  theme_minimal()
+```
+Guardamos la ubicación original para volverla a agregar luego de hace el join
+```{r}
+data <- data %>%
+  mutate(LONGITUD_ORIG = LONGITUD, LATITUD_ORIG = LATITUD)
+
+homicidios_con_comuna <- st_join(data_sf, medellin_mapa, left = FALSE)
+
+homicidios_con_comuna <- homicidios_con_comuna %>%
+  mutate(LONGITUD = st_coordinates(.)[,1], LATITUD = st_coordinates(.)[,2])
+```
+
+```{r}
+
+data <- homicidios_con_comuna[, c("FECHA_HECHO", "LONGITUD", "LATITUD", "SEXO", "EDAD", "MODALIDAD", "LUGAR", "NOMBRE_BARRIO", "nombre")]
+colnames(data)[colnames(data) == "nombre"] <- "COMUNA"
+data$COMUNA <- toupper(data$COMUNA)
+data$geometry <- NULL
+
+str(data)
+```
+
+# Exportar datos limpios
+```{r}
+write.csv(data, file = "../data/homicidios.csv", row.names = FALSE)
+```
+
+# Análisis datos imputados
+
+Calcular la proporción de datos imputados por año
+```{r}
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+Obtenemos los datasets
+```{r}
+homicidios_orig <- read.csv("../data/original/homicidios.csv", na.strings = c("Sin dato", "NaN", "nan", "None"), stringsAsFactors = FALSE)
+homicidios_clean <- data
+```
+
+Asegurar que la columna de fecha está en formato Date
+```{r}
+homicidios_orig <- homicidios_orig %>%
+  mutate(AÑO = year(as.Date(fecha_hecho, format = "%Y-%m-%d")))
+
+homicidios_clean <- homicidios_clean %>%
+  mutate(AÑO = year(as.Date(FECHA_HECHO, format = "%Y-%m-%d")))
+```
+
+Contar homicidios por año en cada dataset
+```{r}
+conteo_orig <- homicidios_orig %>%
+  group_by(AÑO) %>%
+  summarise(total_original = n())
+
+conteo_clean <- homicidios_clean %>%
+  group_by(AÑO) %>%
+  summarise(total_limpio = n())
+```
+
+Unir ambas tablas
+```{r}
+comparacion <- full_join(conteo_orig, conteo_clean, by = "AÑO") %>%
+  mutate(
+    imputados = total_limpio - total_original,
+    proporcion_imputados = abs(imputados / total_limpio)
+  )
+
+print(comparacion)
+```
+
+Visualización
+```{r}
+grafica_proporcion <- ggplot(comparacion, aes(x = AÑO, y = proporcion_imputados)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(
+    title = "Proporción de Registros Imputados por Año",
+    x = "Año",
+    y = "Proporción de Datos Imputados"
+  ) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + # Mostrar en porcentaje
+  theme_minimal()
+
+ggsave("../figures/Registros_imputados.png", grafica_proporcion, width = 8, height = 6, dpi = 300)
+```
+
