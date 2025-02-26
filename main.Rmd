@@ -331,39 +331,20 @@ homicidios_train <- homicidios %>%
 homicidios_train
 ```
 
-
 ```{r}
 modelo <- inla(
-  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION + DUMMY +
+  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION +
                       f(MES, model = "rw1") +  
                       f(ESTRATO, model = "rw1") +  
                       f(OBJECTID, model = "besag", graph = adjacency_inla) +  
                       f(COMUNA_TIEMPO, model = "iid"),
   family = "poisson",
-  data = homicidios,
+  data = homicidios_train,
   control.predictor = list(compute = TRUE)
 )
 ```
 
 ## Resultados del Modelo
-```{r}
-poblacion <- read.csv("data/poblacion.csv")
-poblacion
-```
-
-```{r}
-homicidios <- read.csv("data/homicidios.csv")
-str(homicidios)
-```
-
-
-```{r}
-tabla <- homicidios %>% group_by(COMUNA) %>% tally()
-tabla
-```
-
-
-
 ```{r}
 summary(modelo)
 ```
@@ -373,12 +354,6 @@ modelo$summary.fixed
 ```
 
 ```{r}
-qnorm(0.05, -0.042459067, 0.07377954)
-qnorm(0.95, -0.042459067, 0.07377954)
-```
-
-
-```{r}
 modelo$summary.random$OBJECTID  # Efecto espacial
 ```
 
@@ -386,13 +361,21 @@ modelo$summary.random$OBJECTID  # Efecto espacial
 modelo$summary.random$MES  # Efecto temporal
 ```
 
-
 ```{r}
 modelo$summary.random$ESTRATO
 ```
 
 ```{r}
-nuevos_datos$TOTAL_HOMICIDIOS <- NA
+homicidios_test <- homicidios %>% 
+  filter(AÑO == 2023)
+homicidios_test
+```
+
+
+```{r}
+real <- homicidios_test$TOTAL_HOMICIDIOS
+homicidios_test$TOTAL_HOMICIDIOS <- NA
+homicidios_pred <- bind_rows(homicidios_train, homicidios_test)
 modelo_pred <- inla(
   TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION +
                       f(MES, model = "rw1") +  
@@ -400,8 +383,39 @@ modelo_pred <- inla(
                       f(OBJECTID, model = "besag", graph = adjacency_inla) +  
                       f(COMUNA_TIEMPO, model = "iid"),
   family = "poisson",
-  data = rbind(homicidios, nuevos_datos),
+  data = homicidios_pred,
   control.predictor = list(compute = TRUE)
 )
+```
+
+```{r}
+homicidios_test$PREDICCION <- modelo_pred$summary.fitted.values$mean[
+  (nrow(homicidios_train) + 1):nrow(homicidios_pred)
+]
+homicidios_test$TOTAL_HOMICIDIOS <- real
+homicidios_test
+```
+
+```{r}
+ggplot(homicidios_test, aes(x = MES, group = COMUNA)) +
+  geom_line(aes(y = TOTAL_HOMICIDIOS, color = "Real"), size = 1) +
+  geom_line(aes(y = PREDICCION, color = "Predicción"), linetype = "dashed", size = 1) +
+  facet_wrap(~ COMUNA) +  # Un gráfico para cada comuna
+  labs(title = "Comparación de homicidios reales y predichos",
+       x = "Mes",
+       y = "Total de Homicidios",
+       color = "Datos") +
+  theme_minimal()
+```
+
+```{r}
+ggplot(homicidios_test, aes(x = MES, y = COMUNA, fill = PREDICCION)) +
+  geom_tile() +
+  scale_fill_viridis_c() +
+  labs(title = "Mapa de calor de homicidios predichos",
+       x = "Mes",
+       y = "Comuna",
+       fill = "Predicción") +
+  theme_minimal()
 ```
 
