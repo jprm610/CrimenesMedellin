@@ -117,6 +117,11 @@ comunas <- st_read("data/estrato_por_comunas.geojson")
 ```
 
 ```{r}
+policia <- st_read("data/policia.geojson")
+policia <- st_transform(policia, crs=coords_sys)
+```
+
+```{r}
 estaciones_por_comuna <- policia %>%
   st_join(comunas, join = st_within) %>%  # Une estaciones con comunas en las que están contenidas
   group_by(comuna) %>%  # Agrupa por comuna
@@ -136,7 +141,7 @@ comunas
 ```
 
 ```{r}
-st_write(comunas, "data/comunas_estrato_policias.geojson")
+st_write(comunas, "data/comunas_estrato_policias.geojson", delete_dsn = TRUE)
 ```
 
 ## Homicidios por Comuna y por Mes
@@ -163,9 +168,22 @@ homicidios <- homicidios %>%
 
 
 ```{r}
+# Crear todas las combinaciones posibles de COMUNA, AÑO y MES
+todos_los_meses <- expand.grid(
+  COMUNA = unique(homicidios$COMUNA),
+  AÑO = unique(homicidios$AÑO),
+  MES = 1:12
+)
+
+# Contar homicidios por comuna, año y mes
 homicidios_por_comuna_mes <- homicidios %>%
   group_by(COMUNA, AÑO, MES) %>%
   summarise(TOTAL_HOMICIDIOS = n(), .groups = "drop")
+
+# Unir con la estructura completa y reemplazar NA con 0
+homicidios_por_comuna_mes <- todos_los_meses %>%
+  left_join(homicidios_por_comuna_mes, by = c("COMUNA", "AÑO", "MES")) %>%
+  mutate(TOTAL_HOMICIDIOS = ifelse(is.na(TOTAL_HOMICIDIOS), 0, TOTAL_HOMICIDIOS))
 homicidios_por_comuna_mes
 ```
 
@@ -200,7 +218,7 @@ comunas
 
 ```{r}
 comunas <- comunas %>%
-  rename(COMUNA = NOMBRE)  # Cambiar el nombre de la columna para que coincida
+  rename(COMUNA = nombre)  # Cambiar el nombre de la columna para que coincida
 comunas
 ```
 
