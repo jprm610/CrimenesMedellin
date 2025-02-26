@@ -17,6 +17,7 @@ library(lubridate)
 library(dplyr)
 library(modeest)
 library(tidyr)
+library(INLA)
 ```
 
 # Importar datos
@@ -43,6 +44,17 @@ predios <- st_make_valid(predios)
 # Preparación de los Datos para el Modelo
 
 ## Estratos por Comuna
+```{r}
+comunas <- st_read("data/comunas.geojson")
+comunas <- st_transform(comunas, crs=coords_sys)
+```
+
+```{r}
+predios <- st_read("data/predios.geojson")
+predios <- st_transform(predios, crs=coords_sys)
+predios <- st_make_valid(predios)
+```
+
 
 ```{r}
 estratos_mapa <- ggplot() +
@@ -55,48 +67,53 @@ estratos_mapa
 ```
 
 ```{r}
-interseccion <- st_intersects(comunas, predios, sparse = FALSE)
-```
-
-```{r}
 comunas_predios <- st_intersection(predios, comunas) %>%
-  mutate(AREA = st_area(geometry))  # Calcula área después de la intersección
+  mutate(
+    AREA = as.numeric(st_area(geometry)),  # Convertir a número
+    comuna = as.character(comuna),  # Asegurar que es carácter
+    estrato = as.integer(estrato)   # Convertir estrato a número
+  )
 comunas_predios
 ```
 
 ```{r}
-estrato_comunas <- comunas_predios %>%
-  group_by(comuna) %>%
-  summarise(
-    ESTRATO_PONDERADO = sum(as.numeric(AREA) * estrato) / sum(as.numeric(AREA))
-  ) %>%
-  mutate(ESTRATO = round(ESTRATO_PONDERADO)) %>%
-  select(comuna, ESTRATO)
-estrato_comunas
+comunas_predios <- st_drop_geometry(comunas_predios)
+estrato_por_comuna <- comunas_predios %>% 
+  group_by(comuna, estrato) %>% 
+  summarise(AREA_TOTAL = sum(as.numeric(AREA)), .groups = "drop") %>% 
+  arrange(comuna, desc(AREA_TOTAL)) %>% 
+  ungroup() %>% 
+  group_by(comuna) %>% 
+  slice(1) %>%  # Tomamos solo la primera fila de cada grupo (comuna)
+  ungroup() %>%  # Desagrupamos para evitar problemas posteriores
+  select(comuna, ESTRATO = estrato)
+estrato_por_comuna
 ```
 
 ```{r}
 comunas <- comunas %>%
-  left_join(st_drop_geometry(estrato_comunas), by = "comuna")
+  left_join(estrato_por_comuna, by = "comuna")
 comunas
 ```
 
 ```{r}
-ggplot(comunas) +
+comunas_estrato_plot <- ggplot(comunas) +
   geom_sf(aes(fill = as.factor(ESTRATO)), color = "black", linewidth = 0.3) +
   scale_fill_brewer(palette = "Blues", name = "Estrato") +
   theme_minimal() +
   labs(title = "Estrato Socioeconómico por Comuna en Medellín")
+comunas_estrato_plot
+ggsave("figures/estrato_por_comunas.png")
 ```
 
 
 ```{r}
-st_write(comunas, "data/comunas_estrato.geojson", delete_dsn = TRUE)
+st_write(comunas, "data/estrato_por_comunas.geojson", delete_dsn = TRUE)
 ```
 
 ## Estaciones de Policía
 ```{r}
-comunas <- st_read("data/comunas_estrato.geojson")
+comunas <- st_read("data/estrato_por_comunas.geojson")
 ```
 
 ```{r}
@@ -237,11 +254,6 @@ comunas_sf
 ```
 
 ```{r}
-comunas_sf$OBJECTID
-```
-
-
-```{r}
 library(spdep)
 
 # Crear lista de vecinos
@@ -272,11 +284,11 @@ comunas_sf$OBJECTID <- as.numeric(comunas_sf$OBJECTID)
 
 # Unir OBJECTID a homicidios
 homicidios <- homicidios %>%
-  left_join(comunas_sf %>% select(COMUNA, OBJECTID), by = "COMUNA")
+  left_join(comunas_sf %>% select(COMUNA, OBJECTID), by = "COMUNA") #%>% 
+  #mutate(DUMMY=ifelse(COMUNA=="LA CANDELARIA", 1, 0))
 
 homicidios
 ```
-
 
 ```{r}
 homicidios$COMUNA <- as.factor(homicidios$OBJECTID)
@@ -296,8 +308,16 @@ adjacency_inla <- inla.read.graph("data/matriz_adj.adj")
 ```
 
 ```{r}
+homicidios_train <- homicidios %>% 
+  filter(AÑO != 2023)
+homicidios_train
+```
+
+
+```{r}
 modelo <- inla(
-  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION + f(MES, model = "rw1") +  
+  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION + DUMMY +
+                      f(MES, model = "rw1") +  
                       f(ESTRATO, model = "rw1") +  
                       f(OBJECTID, model = "besag", graph = adjacency_inla) +  
                       f(COMUNA_TIEMPO, model = "iid"),
@@ -306,6 +326,24 @@ modelo <- inla(
   control.predictor = list(compute = TRUE)
 )
 ```
+
+## Resultados del Modelo
+```{r}
+poblacion <- read.csv("data/poblacion.csv")
+poblacion
+```
+
+```{r}
+homicidios <- read.csv("data/homicidios.csv")
+str(homicidios)
+```
+
+
+```{r}
+tabla <- homicidios %>% group_by(COMUNA) %>% tally()
+tabla
+```
+
 
 
 ```{r}
@@ -317,10 +355,35 @@ modelo$summary.fixed
 ```
 
 ```{r}
+qnorm(0.05, -0.042459067, 0.07377954)
+qnorm(0.95, -0.042459067, 0.07377954)
+```
+
+
+```{r}
 modelo$summary.random$OBJECTID  # Efecto espacial
 ```
 
 ```{r}
 modelo$summary.random$MES  # Efecto temporal
+```
+
+
+```{r}
+modelo$summary.random$ESTRATO
+```
+
+```{r}
+nuevos_datos$TOTAL_HOMICIDIOS <- NA
+modelo_pred <- inla(
+  TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION +
+                      f(MES, model = "rw1") +  
+                      f(ESTRATO, model = "rw1") +  
+                      f(OBJECTID, model = "besag", graph = adjacency_inla) +  
+                      f(COMUNA_TIEMPO, model = "iid"),
+  family = "poisson",
+  data = rbind(homicidios, nuevos_datos),
+  control.predictor = list(compute = TRUE)
+)
 ```
 
