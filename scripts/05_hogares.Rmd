@@ -1,0 +1,77 @@
+---
+title: "07_hogares"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)  # Para una paleta de colores amigable
+library(ggspatial)  # Para escala y flecha del norte
+```
+
+
+```{r}
+hogares_pre <- st_read("../data/original/hogares__proyeccion__2018.geojson")
+hogares_pre <- hogares_pre %>% 
+  st_transform(crs=4326) %>% 
+  rename(NOMBRE = nombre, CODIGO = codigo) %>% 
+  mutate(CODIGO = as.numeric(CODIGO)) %>% 
+  group_by(CODIGO) %>%
+  summarise(
+    NOMBRE = first(NOMBRE),
+    across(starts_with("i"), sum, na.rm = TRUE), .groups = "drop"
+  ) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = starts_with("i"), 
+               names_to = "AÑO", 
+               values_to = "HOGARES") %>%
+  mutate(AÑO = as.numeric(sub("i", "", AÑO)))
+hogares_pre$geometry <- NULL
+hogares_pre
+```
+
+
+
+```{r}
+comunas_coords <- st_read("../data/comunas_coords.geojson")
+comunas_coords <- st_transform(comunas_coords, crs=4326)
+comunas_coords
+```
+
+```{r}
+hogares_por_comuna <- left_join(hogares_pre, comunas_coords, by="CODIGO") %>% 
+  select(CODIGO, NOMBRE=NOMBRE.y, AÑO, HOGARES, geometry) %>% 
+  st_as_sf()
+#hogares_por_comuna <- st_as_sf(hogares_por_comuna)
+hogares_por_comuna
+```
+
+```{r}
+hogares_por_comuna_2023 <- hogares_por_comuna %>% 
+  filter(AÑO == 2023)
+hogares_por_comuna_2023
+```
+
+```{r}
+ggplot(hogares_por_comuna_2023) +
+  geom_sf(aes(fill = HOGARES), color = "black") +  # Color según hogares
+  scale_fill_gradient(low = "yellow", high = "red", name = "Hogares") +  # Colores llamativos
+  theme_minimal() +
+  labs(title = "Cantidad de Hogares por Comuna en Medellín (2023)") +
+  theme(legend.position = "right")
+ggsave("../figures/hogares_por_comuna_2023.png")
+```
+
+```{r}
+hogares_por_comuna <- st_drop_geometry(hogares_por_comuna)
+hogares_por_comuna
+```
+
+
+```{r}
+st_write(hogares_por_comuna, "../data/hogares_por_comuna.geojson", delete_dsn = TRUE)
+```
+

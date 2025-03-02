@@ -1,0 +1,42 @@
+---
+title: "03_comunas"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)  # Para una paleta de colores amigable
+library(ggspatial)  # Para escala y flecha del norte
+```
+
+
+```{r}
+comunas_coords <- st_read("../data/original/limite_catastral_de_comun.geojson")
+comunas_coords <- comunas_coords %>% 
+  st_transform(crs=4326) %>% 
+  rename(NOMBRE = nombre, CODIGO = comuna) %>% 
+  mutate(CODIGO = as.numeric(CODIGO)) %>% 
+  select(CODIGO, NOMBRE, geometry) %>% 
+  arrange(CODIGO)
+comunas_coords
+```
+
+```{r}
+comunas_coords$CODIGO
+```
+
+
+```{r}
+ggplot(data = comunas_coords) +
+  geom_sf() + 
+  theme_minimal() +
+  labs(title = "Limites comunas Medellín")
+```
+
+```{r}
+st_write(comunas_coords, "../data/comunas_coords.geojson", delete_dsn = TRUE)
+```
+

@@ -4,31 +4,85 @@ output: html_document
 ---
 
 ```{r}
-data <- read.csv("../data/original/poblacion__proyeccion_201.csv")
+library(sf)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)  # Para una paleta de colores amigable
+library(ggspatial)  # Para escala y flecha del norte
+```
 
-str(data)
+
+```{r}
+poblacion_pre <- st_read("../data/original/poblacion__proyeccion_201.geojson")
+poblacion_pre <- poblacion_pre %>% 
+  rename(NOMBRE=nombre)
+poblacion_pre
 ```
 
 ```{r}
-data <- data[, 3:16]
-colnames(data) <- toupper(colnames(data))
-colnames(data)[colnames(data) == "NOMBRE"] <- "COMUNA"
-
-data$COMUNA <- toupper(data$COMUNA)
-data$COMUNA
+poblacion_pre$NOMBRE <- toupper(poblacion_pre$NOMBRE)
+poblacion_pre$NOMBRE
 ```
 
 ```{r}
-data
+poblacion_pre$NOMBRE[11] <- "LAURELES"
+poblacion_pre$NOMBRE[17] <- "PALMITAS"
+poblacion_pre$NOMBRE
 ```
 
 ```{r}
-data[11,1] <- "LAURELES"
-data[17,1] <- "PALMITAS"
-data
+library(stringi)
+poblacion_pre$NOMBRE <- stri_trans_general(poblacion_pre$NOMBRE, "Latin-ASCII")
+poblacion_pre$NOMBRE
 ```
 
 ```{r}
-write.csv(data, file="../data/poblacion.csv", row.names = FALSE)
+comunas_coords <- st_read("../data/comunas_coords.geojson")
+comunas_coords <- st_drop_geometry(comunas_coords)
+comunas_coords
 ```
 
+```{r}
+all.equal(poblacion_pre$NOMBRE, comunas_coords$NOMBRE)
+```
+
+```{r}
+poblacion_por_comuna <- poblacion_pre %>% 
+  left_join(comunas_coords, by="NOMBRE") %>% 
+  pivot_longer(cols = starts_with("total_"), 
+               names_to = "AÑO", 
+               values_to = "POBLACION") %>%
+  mutate(AÑO = as.numeric(sub("total_", "", AÑO))) %>% 
+  select(CODIGO, NOMBRE, AÑO, POBLACION, geometry) %>% 
+  st_as_sf()
+poblacion_por_comuna
+```
+
+
+```{r}
+poblacion_por_comuna_2023 <- poblacion_por_comuna %>%
+  filter(AÑO == 2023)
+poblacion_por_comuna_2023
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = poblacion_por_comuna_2023, aes(fill = POBLACION), color = "black") + 
+  scale_fill_gradient(low = "yellow", high = "red", name = "Población") +  # Colores para población
+  theme_minimal() +
+  labs(title = "Mapa de Población por Comuna en Medellín") +
+  annotation_scale(location = "br") + 
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+ggsave("../figures/poblacion_por_comuna_2023.png")
+```
+
+```{r}
+poblacion_por_comuna <- st_drop_geometry(poblacion_por_comuna)
+poblacion_por_comuna
+```
+
+
+```{r}
+st_write(poblacion_por_comuna, "../data/poblacion_por_comuna.geojson", delete_dsn = TRUE)
+```

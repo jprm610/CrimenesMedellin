@@ -1,0 +1,96 @@
+---
+title: "02_estratos"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)  # Para una paleta de colores amigable
+library(ggspatial)  # Para escala y flecha del norte
+```
+
+```{r}
+coords_sys <- 4326
+
+comunas_coords <- st_read("../data/comunas_coords.geojson")
+comunas_coords <- st_transform(comunas_coords, crs=coords_sys)
+
+predios <- st_read("../data/original/estrato_socioeconomico.geojson")
+predios <- st_transform(predios, crs=coords_sys)
+```
+
+```{r}
+comunas_coords
+```
+
+
+```{r}
+predios <- predios[st_is_valid(predios), ]
+predios <- st_make_valid(predios)
+predios
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = comunas_coords, fill = NA, color = "black", size = 0.5) +  # Contorno de barrios
+  geom_sf(data = predios, aes(fill = factor(estrato)), alpha = 0.5) +  # Estratos con color
+  scale_fill_viridis_d(name = "Estrato") +  # Escala de color para los estratos
+  theme_minimal() +
+  labs(title = "Mapa de Comuna y Estratos")
+ggsave("../figures/predios_medellin.png", estratos_mapa, width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+predios_con_area <- st_intersection(predios, comunas_coords) %>%
+  mutate(
+    OBJECTID = OBJECTID,
+    AREA = as.numeric(st_area(geometry)),
+    CODIGO = CODIGO,
+    ESTRATO = as.integer(estrato)
+  ) %>% 
+  select(OBJECTID, CODIGO, NOMBRE, ESTRATO, AREA, geometry)
+predios_con_area
+```
+
+```{r}
+estrato_por_comuna_pre <- predios_con_area %>%
+  st_drop_geometry() %>% 
+  group_by(CODIGO, ESTRATO) %>% 
+  summarise(AREA_TOTAL = sum(as.numeric(AREA)), .groups = "drop") %>% 
+  arrange(CODIGO, desc(AREA_TOTAL)) %>% 
+  ungroup() %>% 
+  group_by(CODIGO) %>% 
+  slice(1) %>%  # Tomamos solo la primera fila de cada grupo (comuna)
+  ungroup() %>%  # Desagrupamos para evitar problemas posteriores
+  select(CODIGO, ESTRATO)
+estrato_por_comuna_pre
+```
+
+```{r}
+estrato_por_comuna <- left_join(comunas_coords, estrato_por_comuna_pre)
+estrato_por_comuna
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = comunas_coords, fill = NA, color = "black", size = 0.5) +  # Contorno de barrios
+  geom_sf(data = estrato_por_comuna, aes(fill = factor(ESTRATO)), alpha = 0.5) +  # Estratos con color
+  scale_fill_viridis_d(name = "ESTRATO") +  # Escala de color para los estratos
+  theme_minimal() +
+  labs(title = "Mapa de Comunas y Estratos")
+ggsave("../figures/estrato_por_comuna.png")
+```
+
+```{r}
+estrato_por_comuna <- st_drop_geometry(estrato_por_comuna)
+estrato_por_comuna
+```
+
+
+```{r}
+st_write(estrato_por_comuna, "../data/estrato_por_comuna.geojson", delete_dsn = TRUE)
+```
+

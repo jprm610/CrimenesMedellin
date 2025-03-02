@@ -1,0 +1,34 @@
+---
+title: "06_barrios"
+output: html_document
+---
+
+```{r}
+library(sf)
+library(ggplot2)
+```
+
+```{r}
+# Leer el archivo GeoJSON
+barrios <- st_read("../data/original/barrios_y_veredas.geojson")
+```
+
+```{r}
+str(barrios)
+```
+
+
+```{r}
+barrios_mapa <- ggplot(data = barrios) +
+  geom_sf() + 
+  theme_minimal() +
+  labs(title = "Limites barrios Medellín")
+barrios_mapa
+
+ggsave("../figures/barrios_mapa.png", barrios_mapa, width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+st_write(barrios, "../data/barrios.geojson", delete_dsn = TRUE)
+```
+

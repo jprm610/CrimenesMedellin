@@ -17,216 +17,506 @@ library(lubridate)
 library(dplyr)
 library(modeest)
 library(tidyr)
-```
-
-# Importar datos
-
-```{r}
-#barrios <- st_read("data/barrios.geojson")
-#barrios <- st_transform(barrios, crs=coords_sys)
-
-comunas <- st_read("data/comunas.geojson")
-comunas <- st_transform(comunas, crs=coords_sys)
-```
-
-```{r}
-policia <- st_read("data/policia.geojson")
-policia <- st_transform(policia, crs=coords_sys)
-```
-
-```{r}
-predios <- st_read("data/predios.geojson")
-predios <- st_transform(predios, crs=coords_sys)
-predios <- st_make_valid(predios)
+library(ggspatial)
+library(INLA)
+library(spdep)
 ```
 
 # Preparación de los Datos para el Modelo
-
-## Estratos por Comuna
-
+## Importar Datos
 ```{r}
-estratos_mapa <- ggplot() +
-  geom_sf(data = comunas, fill = NA, color = "black", size = 0.5) +  # Contorno de barrios
-  geom_sf(data = predios, aes(fill = factor(estrato)), alpha = 0.5) +  # Estratos con color
-  scale_fill_viridis_d(name = "Estrato") +  # Escala de color para los estratos
-  theme_minimal() +
-  labs(title = "Mapa de Comunas y Estratos")
-estratos_mapa
+comunas_coords <- st_read("data/comunas_coords.geojson") %>% 
+  st_transform(crs=coords_sys)
 ```
 
 ```{r}
-interseccion <- st_intersects(comunas, predios, sparse = FALSE)
+imprimir_datos <- function(datos, VARIABLE) {
+  joined <- left_join(comunas_coords, datos, by="CODIGO")
+  
+  ggplot() +
+    geom_sf(data = joined, aes(fill = !!sym(VARIABLE)), color = "black") + 
+    scale_fill_gradient(low = "yellow", high = "red", name = VARIABLE) +  # Colores para población
+    theme_minimal() +
+    labs(title = paste("Mapa de", VARIABLE, "por Comuna en Medellín")) +
+    annotation_scale(location = "br") + 
+    annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+}
 ```
 
+### Homcidios por Comuna, Mes y Año
 ```{r}
-comunas_predios <- st_intersection(predios, comunas) %>%
-  mutate(AREA = st_area(geometry))  # Calcula área después de la intersección
-comunas_predios
-```
-
-```{r}
-estrato_comunas <- comunas_predios %>%
-  group_by(comuna) %>%
-  summarise(
-    ESTRATO_PONDERADO = sum(as.numeric(AREA) * estrato) / sum(as.numeric(AREA))
-  ) %>%
-  mutate(ESTRATO = round(ESTRATO_PONDERADO)) %>%
-  select(comuna, ESTRATO)
-estrato_comunas
-```
-
-```{r}
-comunas <- comunas %>%
-  left_join(st_drop_geometry(estrato_comunas), by = "comuna")
-comunas
-```
-
-```{r}
-ggplot(comunas) +
-  geom_sf(aes(fill = as.factor(ESTRATO)), color = "black", linewidth = 0.3) +
-  scale_fill_brewer(palette = "Blues", name = "Estrato") +
-  theme_minimal() +
-  labs(title = "Estrato Socioeconómico por Comuna en Medellín")
-```
-
-
-```{r}
-st_write(comunas, "data/comunas_estrato.geojson", delete_dsn = TRUE)
-```
-
-## Estaciones de Policía
-```{r}
-comunas <- st_read("data/comunas_estrato.geojson")
-```
-
-```{r}
-estaciones_por_comuna <- policia %>%
-  st_join(comunas, join = st_within) %>%  # Une estaciones con comunas en las que están contenidas
-  group_by(comuna) %>%  # Agrupa por comuna
-  summarise(POLICIAS = n())  # Cuenta las estaciones en cada comuna
-estaciones_por_comuna
-```
-
-```{r}
-estaciones_por_comuna <- estaciones_por_comuna %>%
+homicidios_por_comuna_año_mes <- st_read("data/homicidios_por_comuna_año_mes.geojson") %>% 
   st_drop_geometry()
+homicidios_por_comuna_año_mes
+```
 
-comunas <- comunas %>%
-  left_join(estaciones_por_comuna, by = "comuna") %>%
-  mutate(POLICIAS = replace_na(POLICIAS, 0))
 
-comunas
+### Estratos por Comuna
+```{r}
+estrato_por_comuna <- st_read("data/estrato_por_comuna.geojson") %>% 
+  st_drop_geometry()
+estrato_por_comuna
+imprimir_datos(estrato_por_comuna, "ESTRATO")
 ```
 
 ```{r}
-st_write(comunas, "data/comunas_estrato_policias.geojson")
+estrato_por_comuna
 ```
 
-## Homicidios por Comuna y por Mes
+### Poblacion por Comunas
 ```{r}
-homicidios <- read.csv("data/homicidios.csv")
-homicidios <- st_as_sf(homicidios, coords = c("LONGITUD", "LATITUD"), crs = coords_sys)
-```
-
-
-```{r}
-comunas <- st_read("data/comunas_estrato_policias.geojson")
+poblacion_por_comuna <- st_read("data/poblacion_por_comuna.geojson") %>% 
+  st_drop_geometry()
+poblacion_por_comuna
 ```
 
 ```{r}
-homicidios$FECHA_HECHO <- as.Date(homicidios$FECHA_HECHO, format = "%Y-%m-%d")
-homicidios$AÑO <- year(homicidios$FECHA_HECHO)
-homicidios$MES <- month(homicidios$FECHA_HECHO)
+poblacion_por_comuna_2023 <- poblacion_por_comuna %>% 
+  filter(AÑO == 2023)
+imprimir_datos(poblacion_por_comuna_2023, "POBLACION")
+```
+
+### Hogares por Comuna
+```{r}
+hogares_por_comuna <- st_read("data/hogares_por_comuna.geojson") %>% 
+  st_drop_geometry()
+hogares_por_comuna
 ```
 
 ```{r}
-homicidios <- homicidios %>%
-  filter(AÑO >= 2018)
+hogares_por_comuna_2023 <- hogares_por_comuna %>% 
+  filter(AÑO == 2023)
+hogares_por_comuna_2023
+```
+
+```{r}
+imprimir_datos(hogares_por_comuna_2023, "HOGARES")
+ggsave("figures/hogares_por_comuna_2023.png")
+```
+
+### Policia por Comuna
+```{r}
+estaciones_por_comuna <- st_read("data/estaciones_por_comuna.geojson") %>% 
+  st_drop_geometry()
+estaciones_por_comuna
+imprimir_datos(estaciones_por_comuna, "POLICIAS")
+```
+
+## Construcción datos para INLA
+
+### Hogares, Poblacion, Habitantes por Vivienda
+```{r}
+hogares_y_poblacion_por_comuna <- left_join(poblacion_por_comuna, hogares_por_comuna, by = c("CODIGO", "AÑO")) %>% 
+  select(CODIGO, NOMBRE=NOMBRE.x, AÑO, HOGARES, POBLACION) %>% 
+  mutate(HABS_POR_HOGAR = POBLACION / HOGARES)
+hogares_y_poblacion_por_comuna
+```
+
+```{r}
+hogares_y_poblacion_por_comuna_2023 <- hogares_y_poblacion_por_comuna %>% 
+  filter(AÑO == 2023)
+hogares_y_poblacion_por_comuna_2023
+imprimir_datos(hogares_y_poblacion_por_comuna_2023, "HABS_POR_HOGAR")
+ggsave("figures/habs_por_hogar.png")
+```
+
+### Policia y Estrato
+```{r}
+policia_y_estrato_por_comuna <- left_join(estaciones_por_comuna, estrato_por_comuna, by = c("CODIGO")) %>% 
+  select(CODIGO, NOMBRE=NOMBRE.x, POLICIAS, ESTRATO)
+policia_y_estrato_por_comuna
+```
+
+### Homcidios, Policia y Estrato
+```{r}
+homicidios_p_y_e <- left_join(homicidios_por_comuna_año_mes, policia_y_estrato_por_comuna, by = "CODIGO")
+homicidios_p_y_e
+```
+
+### Homicidios Completo
+```{r}
+homicidios_INLA <- inner_join(hogares_y_poblacion_por_comuna, homicidios_p_y_e, by = c("CODIGO", "AÑO")) %>% 
+  select(CODIGO, NOMBRE=NOMBRE.x, AÑO, MES, TOTAL_HOMICIDIOS, POBLACION, HOGARES, HABS_POR_HOGAR, POLICIAS, ESTRATO)
+homicidios_INLA
+```
+
+```{r}
+write.csv(homicidios_INLA, "data/homicidios_INLA.csv", row.names = FALSE)
+```
+
+# Modelo Poisson y Método INLA
+## Matriz de Adyacencia
+### Todas las comunas
+```{r}
+comunas_coords <- st_read("data/comunas_coords.geojson") %>% 
+  st_transform(crs=coords_sys)
+comunas_coords
+```
+
+```{r}
+png("figures/adyacencia.png", width = 800, height = 600)  # Abre el dispositivo gráfico
+
+# Crear lista de vecinos
+vecinos <- poly2nb(comunas_coords)
+
+# Obtener centroides
+centroides <- st_coordinates(st_centroid(comunas_coords))
+
+# Graficar comunas y conexiones
+plot(st_geometry(comunas_coords), border = "gray")  # Dibuja comunas
+plot(vecinos, centroides, add = TRUE, col = "red", points = FALSE)  # Dibuja conexiones
+
+# Agregar etiquetas con el CODIGO de cada comuna
+text(centroides, labels = comunas_coords$CODIGO, cex = 1.5, col = "blue")
+
+dev.off()  # Cierra el dispositivo gráfico y guarda la imagen
+```
+
+```{r}
+# Obtener los códigos únicos de la matriz de adyacencia
+codigos_unicos <- unique(comunas_coords$CODIGO)
+
+# Crear mapeo de CODIGO original a índice de INLA
+mapa_codigos_a_inla <- setNames(seq_along(codigos_unicos), codigos_unicos)
+
+# Crear mapeo inverso de índice de INLA a CODIGO original
+mapa_inla_a_codigos <- setNames(codigos_unicos, seq_along(codigos_unicos))
+```
+
+```{r}
+nb2INLA("data/matriz_adj.adj", vecinos)
+```
+
+## Sin corregimientos
+```{r}
+comunas_coords_sin_corregimientos <- comunas_coords %>% 
+  filter(CODIGO < 50)
+comunas_coords_sin_corregimientos
+```
+
+```{r}
+library(spdep)
+
+# Crear lista de vecinos
+vecinos <- poly2nb(comunas_coords_sin_corregimientos)
+
+# Obtener centroides
+centroides <- st_coordinates(st_centroid(comunas_coords_sin_corregimientos))
+
+# Graficar comunas y conexiones
+plot(st_geometry(comunas_coords_sin_corregimientos), border = "gray")  # Dibuja comunas
+plot(vecinos, centroides, add = TRUE, col = "red", points = FALSE)  # Dibuja conexiones
+
+# Agregar etiquetas con el CODIGO de cada comuna
+text(centroides, labels = comunas_coords_sin_corregimientos$CODIGO, cex = 0.7, col = "blue")
+```
+
+```{r}
+nb2INLA("data/matriz_adj_sin_corregimientos.adj", vecinos)
+```
+
+
+## Datos de homicidios para INLA
+```{r}
+homicidios <- read.csv("data/homicidios_INLA.csv")
+tail(homicidios)
+```
+
+```{r}
+homicidios_INLA <- homicidios %>% 
+  mutate(
+    CODIGO_INLA = as.numeric(mapa_codigos_a_inla[as.character(CODIGO)]),
+    AÑO = as.factor(AÑO),
+    MES = as.factor(MES),
+    POBLACION = POBLACION / 1000,
+    HOGARES = HOGARES / 1000,
+    ESTRATO = as.factor(ESTRATO),
+    COMUNA_TIEMPO = as.factor(paste(CODIGO_INLA, AÑO, sep = "_"))
+  )
+str(homicidios_INLA)
+homicidios_INLA
+```
+
+```{r}
+homicidios_INLA %>% 
+  select(-CODIGO_INLA)
+```
+
+
+## Definición del Modelo y Método INLA
+```{r}
+adjacency_inla <- inla.read.graph("data/matriz_adj.adj")
 ```
 
 
 ```{r}
-homicidios_por_comuna_mes <- homicidios %>%
-  group_by(COMUNA, AÑO, MES) %>%
-  summarise(TOTAL_HOMICIDIOS = n(), .groups = "drop")
-homicidios_por_comuna_mes
+aplicar_INLA <- function(datos, formula) {
+  train <- datos %>% 
+    filter(AÑO != 2023)
+  
+  test <- datos %>% 
+    filter(AÑO == 2023)
+  
+  real <- test$TOTAL_HOMICIDIOS
+  test$TOTAL_HOMICIDIOS <- NA
+  homicidios_pred <- bind_rows(train, test)
+
+  modelo <- inla(
+    as.formula(paste(deparse(formula), collapse = " ")),
+    family = "poisson",
+    data = datos,
+    control.predictor = list(compute = TRUE),
+    control.compute = list(dic = TRUE, waic = TRUE)
+  )
+
+  # Guardar métricas del modelo
+  resultados <- tibble(
+    DIC = modelo$dic$dic,
+    #WAIC = modelo$waic$waic
+  )
+
+  # Agregar predicciones
+  test$PREDICCION <- modelo$summary.fitted.values$mean[
+    (nrow(train) + 1):nrow(homicidios_pred)
+  ]
+  test$TOTAL_HOMICIDIOS <- real
+
+  # Calcular errores
+  errores <- test %>%
+    summarise(
+      MAE = mean(abs(TOTAL_HOMICIDIOS - PREDICCION)),
+      MSE = mean((TOTAL_HOMICIDIOS - PREDICCION)^2),
+      RMSE = sqrt(mean((TOTAL_HOMICIDIOS - PREDICCION)^2))
+    )
+  
+  resultados <- bind_cols(resultados, errores)
+  
+  # Retornar todo en una lista organizada
+  return(list(
+    modelo = modelo,        # Modelo INLA
+    metricas = resultados,# Dataframe con DIC, WAIC y errores
+    predicciones = test     # Dataframe con predicciones
+  ))
+}
 ```
 
-## Agregar Población
+
+### Policias y Poblacion
 ```{r}
-poblacion <- read.csv("data/poblacion.csv")
+formula <- TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION +
+                               f(MES, model = "rw1") +  
+                               f(ESTRATO, model = "rw1") +  
+                               f(CODIGO_INLA, model = "besag", graph = adjacency_inla) +  
+                               f(COMUNA_TIEMPO, model = "iid")
+
+result <- aplicar_INLA(homicidios_INLA, formula)
+result$metricas
+result$predicciones
+```
+
+### Policias, Poblacion y Hogares
+```{r}
+formula <- TOTAL_HOMICIDIOS ~ 1 + POLICIAS + POBLACION + HOGARES +
+                               f(MES, model = "rw1") +  
+                               f(ESTRATO, model = "rw1") +  
+                               f(CODIGO_INLA, model = "besag", graph = adjacency_inla) +  
+                               f(COMUNA_TIEMPO, model = "iid")
+
+result <- aplicar_INLA(homicidios_INLA, formula)
+result$metricas
+result$predicciones
+```
+
+### Policias, Habitantes por Hogar
+```{r}
+formula <- TOTAL_HOMICIDIOS ~ 1 + POLICIAS + HABS_POR_HOGAR +
+                               f(MES, model = "rw1") +  
+                               f(ESTRATO, model = "rw1") +  
+                               f(CODIGO_INLA, model = "besag", graph = adjacency_inla) +  
+                               f(COMUNA_TIEMPO, model = "iid")
+
+result <- aplicar_INLA(homicidios_INLA, formula)
+result$metricas
+result$predicciones
+```
+
+### Policias, Habitantes por Hogar y cíclico
+```{r}
+formula <- TOTAL_HOMICIDIOS ~ 1 + POLICIAS + HABS_POR_HOGAR +
+                               f(MES, model = "rw1", cyclic = TRUE) +  
+                               f(ESTRATO, model = "rw1") +  
+                               f(CODIGO_INLA, model = "besag", graph = adjacency_inla) +  
+                               f(COMUNA_TIEMPO, model = "iid")
+
+result <- aplicar_INLA(homicidios_INLA, formula)
+result$metricas
+result$predicciones
 ```
 
 ```{r}
-poblacion
+ggplot(result$predicciones, aes(x = MES, group = NOMBRE)) +
+  geom_line(aes(y = TOTAL_HOMICIDIOS, color = "Real"), size = 1) +
+  geom_line(aes(y = PREDICCION, color = "Predicción"), size = 1) +
+  facet_wrap(~ NOMBRE) +  # Un gráfico para cada comuna
+  labs(title = "Comparación de homicidios reales y predichos",
+       x = "Mes",
+       y = "Total de Homicidios",
+       color = "Datos") +
+  theme_minimal()
+ggsave("figures/comunas_2023_4.png")
 ```
 
 ```{r}
-poblacion <- poblacion %>%
-  pivot_longer(cols = starts_with("TOTAL_"), 
-               names_to = "AÑO", 
-               values_to = "POBLACION") %>%
-  mutate(AÑO = as.numeric(sub("TOTAL_", "", AÑO))) %>%  # Extraer el año como 
-  filter(AÑO >= 2018 & AÑO <= 2023)
-poblacion
+homicidios_2023 <- result$predicciones %>% 
+  group_by(CODIGO, AÑO) %>% 
+  summarise(
+    TOTAL_HOMICIDIOS = sum(TOTAL_HOMICIDIOS, na.rm = TRUE), 
+    TOTAL_PREDICCION = sum(PREDICCION, na.rm = TRUE),
+    .groups = "drop"
+    )
+homicidios_2023
 ```
 
 ```{r}
-homicidios_final <- homicidios_por_comuna_mes %>%
-  left_join(poblacion, by = c("COMUNA", "AÑO"))
-homicidios_final
+imprimir_datos(homicidios_2023, "TOTAL_PREDICCION")
+ggsave("figures/prediccion_con_corregimientos.png")
 ```
 
 ```{r}
-comunas
+imprimir_datos(homicidios_2023, "TOTAL_HOMICIDIOS")
+ggsave("figures/real_2023.png")
 ```
 
 ```{r}
-comunas <- comunas %>%
-  rename(COMUNA = NOMBRE)  # Cambiar el nombre de la columna para que coincida
-comunas
+df <- result$modelo$summary.fixed %>% 
+  select(mean, `0.025quant`, `0.975quant`) %>% 
+  mutate(PARAMETRO = c("INTERCEPTO", "POLICIAS", "HABS_POR_HOGAR")) %>% 
+  rename(LI = "0.025quant", LS = "0.975quant")
+df
+
+ggplot(df, aes(y = PARAMETRO, x = mean, xmin = LI, xmax = LS)) +
+  geom_point(size = 3, color = "blue") +  # Punto central (media)
+  geom_errorbarh(height = 0.2, color = "black") +  # Intervalos horizontales
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", linewidth = 1) + # Línea en x=0
+  theme_minimal() +
+  labs(x = "Valor estimado", y = "Parámetro", 
+       title = "Intervalos de Confianza 95% para los Parámetros")
+
+ggsave("figures/params_lineales.png")
 ```
 
 ```{r}
-comunas <- comunas %>%
-  st_drop_geometry()  # Elimina la información espacial
+df <- result$modelo$summary.random$ESTRATO %>% 
+  select(ESTRATO=ID, mean, `0.025quant`, `0.975quant`) %>% 
+  rename(LI = "0.025quant", LS = "0.975quant")
+df
+
+ggplot(df, aes(y = ESTRATO, x = mean, xmin = LI, xmax = LS)) +
+  geom_point(size = 3, color = "blue") +  # Punto central (media)
+  geom_errorbarh(height = 0.2, color = "black") +  # Intervalos horizontales
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", linewidth = 1) + # Línea en x=0
+  theme_minimal() +
+  labs(x = "Valor estimado", y = "ESTRATO", 
+       title = "Intervalos de Confianza 95% para los ESTRATOS")
+
+ggsave("figures/params_estrato.png")
+```
+
+```{r}
+df <- result$modelo$summary.random$MES %>% 
+  select(MES=ID, mean, LI=`0.025quant`, LS=`0.975quant`) %>% 
+  mutate(MES = as.numeric(MES)) %>% 
+  arrange(MES) %>% 
+  mutate(MES = as.factor(MES))
+df
+
+ggplot(df, aes(y = MES, x = mean, xmin = LI, xmax = LS)) +
+  geom_point(size = 3, color = "blue") +  # Punto central (media)
+  geom_errorbarh(height = 0.2, color = "black") +  # Intervalos horizontales
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", linewidth = 1) + # Línea en x=0
+  theme_minimal() +
+  labs(x = "Valor estimado", y = "MES", 
+       title = "Intervalos de Confianza 95% para los MESES")
+
+ggsave("figures/params_mes.png")
+```
+
+```{r}
+df <- result$modelo$summary.random$CODIGO_INLA %>% 
+  mutate(CODIGO = as.numeric(mapa_inla_a_codigos[as.character(ID)])) %>% 
+  left_join(comunas_coords, by="CODIGO") %>% 
+  select(NOMBRE, mean, LI=`0.025quant`, LS=`0.975quant`) %>% 
+  arrange(mean) %>% 
+  mutate(NOMBRE = factor(NOMBRE, levels = NOMBRE))  # Mantener orden en ggplot
+df
+
+ggplot(df, aes(y = NOMBRE, x = mean, xmin = LI, xmax = LS)) +
+  geom_point(size = 3, color = "blue") +  # Punto central (media)
+  geom_errorbarh(height = 0.2, color = "black") +  # Intervalos horizontales
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", linewidth = 1) + # Línea en x=0
+  theme_minimal() +
+  labs(x = "Valor estimado", y = "COMUNA", 
+       title = "Intervalos de Confianza 95% para los COMUNAS")
+
+ggsave("figures/params_comunas.png")
+```
+
+
+### Sin corregimientos
+```{r}
+adjacency_inla_sin_corregimientos <- inla.read.graph("data/matriz_adj_sin_corregimientos.adj")
+homicidios_INLA_sin_corregimientos <- homicidios_INLA %>% 
+  filter(CODIGO < 50)
+head(homicidios_INLA_sin_corregimientos)
+```
+
+```{r}
+unique(homicidios_INLA_sin_corregimientos$CODIGO)
+```
+
+```{r}
+formula <- TOTAL_HOMICIDIOS ~ 1 + POLICIAS + HABS_POR_HOGAR +
+                                f(MES, model = "rw1", cyclic = TRUE) +  
+                                f(ESTRATO, model = "rw1") +  
+                                f(CODIGO_INLA, model = "besag", graph = adjacency_inla_sin_corregimientos) +  
+                                f(COMUNA_TIEMPO, model = "iid")
+
+result <- aplicar_INLA(homicidios_INLA_sin_corregimientos, formula)
+result$metricas
+result$predicciones
+```
+
+```{r}
+ggplot(result$predicciones, aes(x = MES, group = NOMBRE)) +
+  geom_line(aes(y = TOTAL_HOMICIDIOS, color = "Real"), size = 1) +
+  geom_line(aes(y = PREDICCION, color = "Predicción"), size = 1) +
+  facet_wrap(~ NOMBRE) +  # Un gráfico para cada comuna
+  labs(title = "Comparación de homicidios reales y predichos",
+       x = "Mes",
+       y = "Total de Homicidios",
+       color = "Datos") +
+  theme_minimal()
+ggsave("figures/comunas_2023_5.png")
+```
+
+```{r}
+homicidios_2023 <- result$predicciones %>% 
+  group_by(CODIGO, AÑO) %>% 
+  summarise(
+    TOTAL_HOMICIDIOS = sum(TOTAL_HOMICIDIOS, na.rm = TRUE), 
+    TOTAL_PREDICCION = sum(PREDICCION, na.rm = TRUE),
+    .groups = "drop"
+    )
+homicidios_2023
 ```
 
 
 ```{r}
-homicidios_final <- homicidios_final %>%
-  left_join(comunas, by = "COMUNA")
-homicidios_final
+imprimir_datos(homicidios_2023, "TOTAL_PREDICCION")
+ggsave("figures/prediccion_sin_corregimientos.png")
 ```
 
 ```{r}
-homicidios_final <- homicidios_final %>%
-  select(COMUNA, AÑO, MES, TOTAL_HOMICIDIOS, POBLACION, ESTRATO, POLICIAS)
-
-homicidios_final$geometry <- NULL
-homicidios_final
+imprimir_datos(homicidios_2023, "TOTAL_HOMICIDIOS")
+ggsave("figures/real_sin_corregimientos_2023.png")
 ```
-
-```{r}
-summary(homicidios_final)  # Muestra resúmenes estadísticos
-sum(is.na(homicidios_final))  # Cuenta cuántos valores NA hay
-colSums(is.na(homicidios_final))  # Muestra cuántos NA hay por columna
-```
-
-```{r}
-str(homicidios_final)  # Verifica tipos de datos
-```
-
-```{r}
-homicidios_final$COMUNA <- as.factor(homicidios_final$COMUNA)
-homicidios_final$MES <- as.factor(homicidios_final$MES)
-homicidios_final$AÑO <- as.factor(homicidios_final$AÑO)
-homicidios_final$ESTRATO <- as.factor(homicidios_final$ESTRATO)
-
-str(homicidios_final)
-```
-
-```{r}
-write.csv(homicidios_final, "data/homicidios_final.csv", row.names = FALSE)
-```
-

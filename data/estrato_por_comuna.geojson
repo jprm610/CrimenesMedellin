@@ -1,0 +1,27 @@
+{
+"type": "FeatureCollection",
+"name": "estrato_por_comuna",
+"features": [
+{ "type": "Feature", "properties": { "CODIGO": 1.0, "NOMBRE": "POPULAR", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 2.0, "NOMBRE": "SANTA CRUZ", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 3.0, "NOMBRE": "MANRIQUE", "ESTRATO": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 4.0, "NOMBRE": "ARANJUEZ", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 5.0, "NOMBRE": "CASTILLA", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 6.0, "NOMBRE": "DOCE DE OCTUBRE", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 7.0, "NOMBRE": "ROBLEDO", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 8.0, "NOMBRE": "VILLA HERMOSA", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 9.0, "NOMBRE": "BUENOS AIRES", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 10.0, "NOMBRE": "LA CANDELARIA", "ESTRATO": 4 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 11.0, "NOMBRE": "LAURELES", "ESTRATO": 5 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 12.0, "NOMBRE": "LA AMERICA", "ESTRATO": 4 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 13.0, "NOMBRE": "SAN JAVIER", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 14.0, "NOMBRE": "EL POBLADO", "ESTRATO": 6 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 15.0, "NOMBRE": "GUAYABAL", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 16.0, "NOMBRE": "BELEN", "ESTRATO": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 50.0, "NOMBRE": "PALMITAS", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 60.0, "NOMBRE": "SAN CRISTOBAL", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 70.0, "NOMBRE": "ALTAVISTA", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 80.0, "NOMBRE": "SAN ANTONIO DE PRADO", "ESTRATO": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 90.0, "NOMBRE": "SANTA ELENA", "ESTRATO": 2 }, "geometry": null }
+]
+}

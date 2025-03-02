@@ -9,7 +9,7 @@ data <- read.csv("../data/original/homicidios.csv", na.strings = c("Sin dato", "
 dim(data) #=> 19647, 36
 ```
 # Limpieza Básica
-Hallamos las columnas que tengan un solo valory las guardamos junto al valor
+Hallamos las columnas que tengan un solo valor y las guardamos junto al valor
 ```{r}
 colnames(data) <- toupper(colnames(data))
 columnas_valor_unico <- list()
@@ -81,12 +81,12 @@ library(dplyr)
 
 
 ```{r}
-medellin_mapa <- st_read("../data/limite_catastral_de_comun/limite_catastral_de_comun.shp")
-medellin_mapa <- st_transform(medellin_mapa, crs = 4326)
+comunas_coords <- st_read("../data/comunas_coords.geojson") %>% 
+  st_transform(crs=4326)
 ```
 
 ```{r}
-data_sf <- st_as_sf(data, coords = c("LONGITUD", "LATITUD"), crs = 4326)
+homicidios <- st_as_sf(data, coords = c("LONGITUD", "LATITUD"), crs = 4326)
 ```
 
 ```{r}
@@ -94,35 +94,80 @@ library(ggplot2)
 
 # Graficar los límites de las comunas
 ggplot() +
-  geom_sf(data = medellin_mapa, fill = NA, color = "black") +  # Mapa de comunas
-  geom_sf(data = data_sf, aes(color = "red"), size = 1, alpha = 0.5) +  # Puntos de homicidios
+  geom_sf(data = comunas_coords, fill = NA, color = "black") +  # Mapa de comunas
+  geom_sf(data = homicidios, aes(color = "red"), size = 1, alpha = 0.5) +  # Puntos de homicidios
   labs(title = "Mapa de homicidios y comunas de Medellín") +
   theme_minimal()
 ```
 Guardamos la ubicación original para volverla a agregar luego de hace el join
 ```{r}
-data <- data %>%
-  mutate(LONGITUD_ORIG = LONGITUD, LATITUD_ORIG = LATITUD)
-
-homicidios_con_comuna <- st_join(data_sf, medellin_mapa, left = FALSE)
-
-homicidios_con_comuna <- homicidios_con_comuna %>%
-  mutate(LONGITUD = st_coordinates(.)[,1], LATITUD = st_coordinates(.)[,2])
+homicidios_pre <- st_join(homicidios, comunas_coords, left = FALSE) %>% 
+  mutate(LONGITUD = st_coordinates(.)[,1], LATITUD = st_coordinates(.)[,2]) %>% 
+  select(FECHA_HECHO, CODIGO, MODALIDAD, EDAD, SEXO) %>% 
+  st_drop_geometry()
+homicidios_pre
 ```
 
 ```{r}
-
-data <- homicidios_con_comuna[, c("FECHA_HECHO", "LONGITUD", "LATITUD", "SEXO", "EDAD", "MODALIDAD", "LUGAR", "NOMBRE_BARRIO", "nombre")]
-colnames(data)[colnames(data) == "nombre"] <- "COMUNA"
-data$COMUNA <- toupper(data$COMUNA)
-data$geometry <- NULL
-
-str(data)
+homicidios <- homicidios_pre %>% 
+  mutate(
+    FECHA_HECHO = as.Date(FECHA_HECHO, format = "%Y-%m-%d"),
+    AÑO = year(FECHA_HECHO),
+    MES = month(FECHA_HECHO)
+  )
+homicidios
 ```
+
+```{r}
+# Crear todas las combinaciones posibles de COMUNA, AÑO y MES
+todos_los_meses <- expand.grid(
+  CODIGO = unique(homicidios$CODIGO),
+  AÑO = unique(homicidios$AÑO),
+  MES = 1:12
+)
+
+# Contar homicidios por comuna, año y mes
+homicidios_por_comuna_año_mes <- homicidios %>%
+  group_by(CODIGO, AÑO, MES) %>%
+  summarise(TOTAL_HOMICIDIOS = n(), .groups = "drop") 
+
+# Asegurar que todos los meses aparezcan, incluso con 0 homicidios
+homicidios_por_comuna_año_mes <- todos_los_meses %>%
+  left_join(homicidios_por_comuna_año_mes, by = c("CODIGO", "AÑO", "MES")) %>%
+  mutate(TOTAL_HOMICIDIOS = ifelse(is.na(TOTAL_HOMICIDIOS), 0, TOTAL_HOMICIDIOS)) %>%
+  arrange(CODIGO, AÑO, MES)
+
+homicidios_por_comuna_año_mes
+```
+
+```{r}
+homicidios_ene_2022 <- homicidios_por_comuna_año_mes %>% 
+  filter(AÑO == 2022, MES == 1)
+homicidios_ene_2022
+```
+
+```{r}
+imprimir_datos <- function(datos, VARIABLE) {
+  joined <- left_join(comunas_coords, datos, by="CODIGO")
+  
+  ggplot() +
+    geom_sf(data = joined, aes(fill = !!sym(VARIABLE)), color = "black") + 
+    scale_fill_gradient(low = "yellow", high = "red", name = VARIABLE) +  # Colores para población
+    theme_minimal() +
+    labs(title = paste("Mapa de", VARIABLE, "por Comuna en Medellín")) +
+    annotation_scale(location = "br") + 
+    annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)
+}
+```
+
+```{r}
+imprimir_datos(homicidios_ene_2022, "TOTAL_HOMICIDIOS")
+```
+
 
 # Exportar datos limpios
 ```{r}
-write.csv(data, file = "../data/homicidios.csv", row.names = FALSE)
+st_write(homicidios_por_comuna_año_mes, "../data/homicidios_por_comuna_año_mes.geojson", delete_dsn = TRUE)
 ```
 
 # Análisis datos imputados

@@ -1,0 +1,143 @@
+---
+title: "05_policia"
+output: html_document
+---
+
+```{r}
+library(osmdata)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(units)
+library(tidyr)
+```
+
+```{r}
+comunas_coords <- st_read("../data/comunas_coords.geojson")
+comunas_coords <- st_transform(comunas_coords, crs=4326)
+comunas_coords
+```
+
+
+```{r}
+medellin <- opq("Medellín, Colombia") %>%
+  add_osm_feature(key = "amenity", value = "police")  %>%
+  osmdata_sf()
+
+# Extraer los puntos de estaciones de policía
+estaciones_sf <- medellin$osm_points
+plot(estaciones_sf["geometry"])
+```
+
+```{r}
+estaciones_sf <- st_transform(estaciones_sf, crs=4326)
+```
+
+
+```{r}
+str(estaciones_sf)
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = comunas, fill = "gray90", color = "black", alpha = 0.7) +  # Mapa base
+  geom_sf(data = estaciones_sf, color = "red", size = 2) +  # Estaciones de policía
+  labs(title = "Estaciones de Policía en Medellín",
+       caption = "Fuente: OpenStreetMap") +
+  theme_minimal()
+ggsave("../figures/policia.png", policia, width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+estaciones <- estaciones_sf %>%
+  st_filter(comunas, .predicate = st_intersects)
+```
+
+
+```{r}
+ggplot() +
+  geom_sf(data = comunas, fill = "gray90", color = "black", alpha = 0.7) +  # Mapa base
+  geom_sf(data = estaciones, color = "red", size = 2) +  # Estaciones de policía
+  labs(title = "Estaciones de Policía en Medellín",
+       caption = "Fuente: OpenStreetMap") +
+  theme_minimal()
+```
+
+```{r}
+# Calculamos la matriz de distancias geodésicas (en metros)
+distancias <- st_distance(estaciones)
+
+# Definir umbral con unidades de metros
+umbral <- set_units(100, "m")
+
+# Encontrar pares de estaciones demasiado cercanas
+cercanas <- which(distancias < umbral & distancias > set_units(0, "m"), arr.ind = TRUE)
+
+# Mostrar pares de estaciones sospechosas
+estaciones[cercanas[, 1], ]
+```
+
+```{r}
+# Convertir a dataframe para procesarlo mejor
+duplicados <- as.data.frame(cercanas)
+colnames(duplicados) <- c("idx1", "idx2")
+
+# Función para contar cuántos valores no son NA en cada fila
+completeness_score <- function(row) {
+  sum(!is.na(row))
+}
+
+# Aplicar la función a todas las filas
+estaciones$info_score <- apply(estaciones, 1, completeness_score)
+
+# Seleccionar la mejor estación en cada par
+eliminar <- c()
+for (i in 1:nrow(duplicados)) {
+  idx1 <- duplicados$idx1[i]
+  idx2 <- duplicados$idx2[i]
+  
+  # Compara cuál tiene más información
+  if (estaciones$info_score[idx1] > estaciones$info_score[idx2]) {
+    eliminar <- c(eliminar, idx2)
+  } else {
+    eliminar <- c(eliminar, idx1)
+  }
+}
+
+# Filtrar dataset para conservar solo las estaciones con más información
+estaciones_limpias <- estaciones[-unique(eliminar), ] %>% select(-info_score)
+
+estaciones_limpias
+```
+
+```{r}
+ggplot() +
+  geom_sf(data = comunas, fill = "gray90", color = "black", alpha = 0.7) +  # Mapa base
+  geom_sf(data = estaciones_limpias, color = "red", size = 2) +  # Estaciones de policía
+  labs(title = "Estaciones de Policía en Medellín",
+       caption = "Fuente: OpenStreetMap") +
+  theme_minimal()
+ggsave("../figures/policias_clean.png")
+```
+
+```{r}
+estaciones_por_comuna_pre <- estaciones_limpias %>%
+  st_join(comunas_coords, join = st_within) %>%  # Une estaciones con comunas en las que están contenidas
+  group_by(CODIGO) %>%  # Agrupa por comuna
+  summarise(POLICIAS = n()) %>%  # Cuenta las estaciones en cada comuna
+  st_drop_geometry()
+estaciones_por_comuna_pre
+```
+
+```{r}
+estaciones_por_comuna <- left_join(comunas_coords, estaciones_por_comuna_pre, by="CODIGO") %>% 
+  mutate(POLICIAS = replace_na(POLICIAS, 0)) %>% 
+  st_drop_geometry()
+estaciones_por_comuna
+```
+
+
+```{r}
+st_write(estaciones_por_comuna, "../data/estaciones_por_comuna.geojson", delete_dsn = TRUE)
+```
+

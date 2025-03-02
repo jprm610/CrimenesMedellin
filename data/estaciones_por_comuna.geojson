@@ -1,0 +1,27 @@
+{
+"type": "FeatureCollection",
+"name": "estaciones_por_comuna",
+"features": [
+{ "type": "Feature", "properties": { "CODIGO": 1.0, "NOMBRE": "POPULAR", "POLICIAS": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 2.0, "NOMBRE": "SANTA CRUZ", "POLICIAS": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 3.0, "NOMBRE": "MANRIQUE", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 4.0, "NOMBRE": "ARANJUEZ", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 5.0, "NOMBRE": "CASTILLA", "POLICIAS": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 6.0, "NOMBRE": "DOCE DE OCTUBRE", "POLICIAS": 4 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 7.0, "NOMBRE": "ROBLEDO", "POLICIAS": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 8.0, "NOMBRE": "VILLA HERMOSA", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 9.0, "NOMBRE": "BUENOS AIRES", "POLICIAS": 3 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 10.0, "NOMBRE": "LA CANDELARIA", "POLICIAS": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 11.0, "NOMBRE": "LAURELES", "POLICIAS": 4 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 12.0, "NOMBRE": "LA AMERICA", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 13.0, "NOMBRE": "SAN JAVIER", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 14.0, "NOMBRE": "EL POBLADO", "POLICIAS": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 15.0, "NOMBRE": "GUAYABAL", "POLICIAS": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 16.0, "NOMBRE": "BELEN", "POLICIAS": 2 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 50.0, "NOMBRE": "PALMITAS", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 60.0, "NOMBRE": "SAN CRISTOBAL", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 70.0, "NOMBRE": "ALTAVISTA", "POLICIAS": 0 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 80.0, "NOMBRE": "SAN ANTONIO DE PRADO", "POLICIAS": 1 }, "geometry": null },
+{ "type": "Feature", "properties": { "CODIGO": 90.0, "NOMBRE": "SANTA ELENA", "POLICIAS": 3 }, "geometry": null }
+]
+}
